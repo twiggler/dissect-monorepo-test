@@ -7,7 +7,7 @@ We kindly request that you use the `dissect.contrib` namespace prefix for your p
 `myfilesystem` would be called `dissect.contrib.myfilesystem`.
 
 For more information on developing for Dissect, please see
-[the documentation](https://dissect.readthedocs.io/en/latest/contributing/developing.html).
+[the documentation](https://docs.dissect.tools/en/latest/contributing/developing.html).
 
 ## Build and test instructions
 
@@ -28,12 +28,12 @@ tox
 ```
 
 For a more elaborate explanation on how to build and test the project, please see [the
-documentation](https://dissect.readthedocs.io/en/latest/contributing/developing.html#building-testing).
+documentation](https://docs.dissect.tools/en/latest/contributing/developing.html#building-testing).
 
 ## Contributing
 
 The Dissect project encourages any contribution to the codebase. To make your contribution fit into the project, please
-refer to [the style guide](https://dissect.readthedocs.io/en/latest/contributing/style-guide.html).
+refer to [the style guide](https://docs.dissect.tools/en/latest/contributing/style-guide.html).
 
 ## Copyright and license
 
