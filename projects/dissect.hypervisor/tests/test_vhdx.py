@@ -5,7 +5,7 @@ import pytest
 from dissect.hypervisor.disk.vhdx import VHDX, c_vhdx, _iter_partial_runs
 
 
-def test_fixed_vhdx(fixed_vhdx):
+def test_vhdx_fixed(fixed_vhdx):
     v = VHDX(fixed_vhdx)
 
     assert v.size == 0xA00000
@@ -42,7 +42,7 @@ def test_fixed_vhdx(fixed_vhdx):
         assert block_entry.state == c_vhdx.PAYLOAD_BLOCK_FULLY_PRESENT
 
 
-def test_dynamic_vhdx(dynamic_vhdx):
+def test_vhdx_dynamic(dynamic_vhdx):
     v = VHDX(dynamic_vhdx)
 
     assert v.size == 0xA00000
@@ -75,7 +75,7 @@ def test_dynamic_vhdx(dynamic_vhdx):
     assert v.read(512) == b"\xFF" * 512
 
 
-def test_differencing_vhdx(differencing_vhdx):
+def test_vhdx_differencing(differencing_vhdx):
     with pytest.raises(IOError):
         VHDX(differencing_vhdx)
 
@@ -97,5 +97,5 @@ def test_differencing_vhdx(differencing_vhdx):
         ((b"\x00", 1, 6), [(0, 6)]),
     ],
 )
-def test_partial_runs(test_input, expected):
+def test_vhdx_partial_runs(test_input, expected):
     assert list(_iter_partial_runs(*test_input)) == expected
