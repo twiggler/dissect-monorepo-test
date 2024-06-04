@@ -184,8 +184,7 @@ union jffs2_device_node {
 };
 """  # noqa
 
-c_jffs2 = cstruct()
-c_jffs2.load(jffs2_def)
+c_jffs2 = cstruct().load(jffs2_def)
 
 JFFS2_MAGIC_NUMBERS = (c_jffs2.JFFS2_MAGIC_BITMASK, c_jffs2.JFFS2_OLD_MAGIC_BITMASK)
 

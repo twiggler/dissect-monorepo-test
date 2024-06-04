@@ -16,8 +16,8 @@ classifiers = [
   "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "dissect.cstruct>=3.0.dev,<4.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
+    "dissect.cstruct>=4.dev,<5",
+    "dissect.util>=3,<4",
 ]
 dynamic = ["version"]
 
@@ -25,6 +25,12 @@ dynamic = ["version"]
 homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.jffs"
 repository = "https://github.com/fox-it/dissect.jffs"
+
+[project.optional-dependencies]
+dev = [
+    "dissect.cstruct>=4.0.dev,<5.0.dev",
+    "dissect.util>=3.0.dev,<4.0.dev",
+]
 
 [tool.black]
 line-length = 120
