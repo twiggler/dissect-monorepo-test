@@ -156,20 +156,20 @@ class JFFS2:
             c_jffs2.jffs2_raw_dirent(
                 pino=self.root.inum,
                 version=1,
-                ino=None,
+                ino=-1,
                 type=c_jffs2.DT_DIR,
                 name=b"lost+found",
             ),
         )
         self._dirents[self.root.inum][trash_dirent.entry.name] = [trash_dirent]
-        self._dirents[None] = {}
+        self._dirents[-1] = {}
 
         # Add all orphaned files to the lost+found folder
         for dirents in self._lost_found:
             dirent = dirents[-1]
             dirent.name = f"{dirent.name}_ino_{dirent.inum}_pino_{dirent.parent_inum}_ver_{dirent.version}"
-            dirent.parent_inum = None
-            self._dirents[None][dirent.name.encode()] = dirents
+            dirent.parent_inum = -1
+            self._dirents[-1][dirent.name.encode()] = dirents
 
 
 class DirEntry:
@@ -202,8 +202,8 @@ class INode:
     @cached_property
     def inodes(self) -> list[tuple[c_jffs2.jffs2_raw_inode, int]]:
         # Root inode does not exist in jffs2 so we create a fake one (0x1),
-        # None is reserved for the lost+found directory
-        if self.inum in [0x1, None]:
+        # -1 is reserved for the lost+found directory
+        if self.inum in [0x1, -1]:
             return [
                 (
                     c_jffs2.jffs2_raw_inode(
@@ -224,7 +224,7 @@ class INode:
 
         inodes = self.fs._inodes.get(self.inum)
         if not inodes:
-            return ValueError(f"INode with inum {self.inum} does not exist")
+            raise ValueError(f"INode with inum {self.inum} does not exist")
 
         return inodes
 
