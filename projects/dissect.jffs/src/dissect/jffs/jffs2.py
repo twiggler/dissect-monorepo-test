@@ -5,9 +5,8 @@ import os
 import stat
 import zlib
 from bisect import bisect_right
-from datetime import datetime
 from functools import cache, cached_property, lru_cache
-from typing import BinaryIO, Iterator, Optional, Union
+from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.util import ts
 from dissect.util.compression import lzo
@@ -20,6 +19,10 @@ from dissect.jffs.exceptions import (
     NotADirectoryError,
     NotASymlinkError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from datetime import datetime
 
 log = logging.getLogger(__name__)
 log.setLevel(os.getenv("DISSECT_LOG_JFFS", "CRITICAL"))
@@ -54,10 +57,10 @@ class JFFS2:
         self._scan()
         self._garbage_collect()
 
-    def inode(self, inum: int, type: Optional[int] = None, parent: Optional[INode] = None) -> INode:
+    def inode(self, inum: int, type: int | None = None, parent: INode | None = None) -> INode:
         return INode(self, inum, type, parent)
 
-    def get(self, path: Union[str, int], node: Optional[INode] = None) -> INode:
+    def get(self, path: str | int, node: INode | None = None) -> INode:
         if isinstance(path, int):
             return self.inode(path)
 
@@ -188,7 +191,7 @@ class DirEntry:
 
 
 class INode:
-    def __init__(self, fs: JFFS2, inum: int, type: Optional[int] = None, parent: Optional[INode] = None):
+    def __init__(self, fs: JFFS2, inum: int, type: int | None = None, parent: INode | None = None):
         self.fs = fs
         self.inum = inum
         self._type = type
@@ -281,12 +284,12 @@ class INode:
         return self.open().read().decode(errors="surrogateescape")
 
     @cached_property
-    def link_inode(self):
+    def link_inode(self) -> INode:
         link = self.link
         return self.fs.get(self.link, self.parent if link.startswith("/") else None)
 
     def listdir(self) -> dict:
-        return {name: node for name, node in self.iterdir()}
+        return dict(self.iterdir())
 
     def iterdir(self) -> Iterator[tuple[str, INode]]:
         if not self.is_dir():
