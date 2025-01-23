@@ -2,6 +2,8 @@
 # - https://github.com/torvalds/linux/blob/master/include/uapi/linux/jffs2.h
 # - https://github.com/torvalds/linux/blob/master/include/linux/fs_types.h
 
+from __future__ import annotations
+
 import stat
 
 from dissect.cstruct import cstruct
