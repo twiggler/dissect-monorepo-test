@@ -16,10 +16,12 @@ def test_jffs2_uncompressed(jffs2_bin: BinaryIO) -> None:
 
     root = fs.root
     assert root.is_dir()
+    assert root.nlink == 4  #  3 from root and 1 from subdirectory
     assert list(root.listdir().keys()) == ["foo", "test.txt"]
 
     test_file = fs.get("/test.txt")
     assert test_file.is_file()
+    assert test_file.nlink == 1
     assert test_file.atime == datetime(2023, 6, 23, 20, 27, 20, tzinfo=timezone.utc)
     assert test_file.ctime == datetime(2023, 6, 23, 20, 27, 20, tzinfo=timezone.utc)
     assert test_file.mtime == datetime(2023, 6, 23, 20, 27, 20, tzinfo=timezone.utc)
@@ -27,6 +29,7 @@ def test_jffs2_uncompressed(jffs2_bin: BinaryIO) -> None:
 
     link_file = fs.get("/foo/bar/link.txt")
     assert link_file.is_symlink()
+    assert link_file.nlink == 1
     assert link_file.link == "/test.txt"
 
 
