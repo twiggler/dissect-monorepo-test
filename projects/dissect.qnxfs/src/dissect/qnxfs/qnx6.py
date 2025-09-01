@@ -74,15 +74,15 @@ class QNX6:
 
         self.root = self.inode(c_qnx6.QNX6_ROOT_INO)
 
-    def inode(self, inum: int) -> INode:
+    def inode(self, inum: int) -> INode6:
         """Return an inode object for the given inode number.
 
         Args:
             inum: The inode number.
         """
-        return INode(self, inum)
+        return INode6(self, inum)
 
-    def get(self, path: str | int, node: INode | None = None) -> INode:
+    def get(self, path: str | int, node: INode6 | None = None) -> INode6:
         """Return an inode object for the given path or inode number.
 
         Args:
@@ -115,7 +115,7 @@ class QNX6:
         return node
 
 
-class INode:
+class INode6:
     def __init__(self, fs: QNX6, inum: int):
         self.fs = fs
         self.inum = inum
@@ -222,11 +222,11 @@ class INode:
         """Return whether this inode is an IPC file."""
         return self.is_fifo() or self.is_socket()
 
-    def listdir(self) -> dict[str, INode]:
+    def listdir(self) -> dict[str, INode6]:
         """Return a directory listing."""
         return dict(self.iterdir())
 
-    def iterdir(self) -> Iterator[tuple[str, INode]]:
+    def iterdir(self) -> Iterator[tuple[str, INode6]]:
         """Iterate directory contents."""
         if not self.is_dir():
             raise NotADirectoryError(f"{self!r} is not a directory")
