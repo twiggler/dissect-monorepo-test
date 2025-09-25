@@ -1,3 +1,1 @@
-tests/data/jffs2.bin.gz filter=lfs diff=lfs merge=lfs -text
-tests/data/jffs2.zlib.bin.gz filter=lfs diff=lfs merge=lfs -text
-tests/data/router.bin.gz filter=lfs diff=lfs merge=lfs -text
+tests/_data/* filter=lfs diff=lfs merge=lfs -text
