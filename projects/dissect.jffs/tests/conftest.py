@@ -21,14 +21,14 @@ def gzip_file(filename: str) -> Iterator[BinaryIO]:
 
 @pytest.fixture
 def jffs2_bin() -> Iterator[BinaryIO]:
-    yield from gzip_file("data/jffs2.bin.gz")
+    yield from gzip_file("_data/jffs2.bin.gz")
 
 
 @pytest.fixture
 def jffs2_zlib() -> Iterator[BinaryIO]:
-    yield from gzip_file("data/jffs2.zlib.bin.gz")
+    yield from gzip_file("_data/jffs2.zlib.bin.gz")
 
 
 @pytest.fixture
 def jffs2_router() -> Iterator[BinaryIO]:
-    yield from gzip_file("data/router.bin.gz")
+    yield from gzip_file("_data/router.bin.gz")
