@@ -1,30 +1,37 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import pytest
 
 from dissect.database.sqlite3 import sqlite3
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def test_sqlite(sqlite_db: BinaryIO) -> None:
-    s = sqlite3.SQLite3(sqlite_db)
 
-    assert s.header.magic == sqlite3.SQLITE3_HEADER_MAGIC
+@pytest.mark.parametrize(
+    ("db_as_path"),
+    [pytest.param(True, id="db_as_path"), pytest.param(False, id="db_as_fh")],
+)
+def test_sqlite(sqlite_db: Path, db_as_path: bool) -> None:
+    db = sqlite3.SQLite3(sqlite_db) if db_as_path else sqlite3.SQLite3(sqlite_db.open("rb"))
 
-    tables = list(s.tables())
-    assert len(tables) == 1
+    assert db.header.magic == sqlite3.SQLITE3_HEADER_MAGIC
+
+    tables = list(db.tables())
+    assert len(tables) == 2
 
     table = tables[0]
     assert table.name == "test"
     assert table.page == 2
     assert [column.name for column in table.columns] == ["id", "name", "value"]
     assert table.primary_key == "id"
-    assert s.table("test").__dict__ == table.__dict__
+    assert db.table("test").__dict__ == table.__dict__
 
     rows = list(table.rows())
-    assert len(rows) == 5
+    assert len(rows) == 10
     assert rows[0].id == 1
     assert rows[0].name == "testing"
     assert rows[0].value == 1337
@@ -40,6 +47,21 @@ def test_sqlite(sqlite_db: BinaryIO) -> None:
     assert rows[4].id == 5
     assert rows[4].name == "negative"
     assert rows[4].value == -11644473429
+    assert rows[5].id == 6
+    assert rows[5].name == "after checkpoint"
+    assert rows[5].value == 42
+    assert rows[6].id == 8
+    assert rows[6].name == "after checkpoint"
+    assert rows[6].value == 44
+    assert rows[7].id == 9
+    assert rows[7].name == "wow"
+    assert rows[7].value == 1234
+    assert rows[8].id == 10
+    assert rows[8].name == "second checkpoint"
+    assert rows[8].value == 100
+    assert rows[9].id == 11
+    assert rows[9].name == "second checkpoint"
+    assert rows[9].value == 101
 
     assert len(rows) == len(list(table))
     assert table.row(0).__dict__ == rows[0].__dict__
