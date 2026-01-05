@@ -19,7 +19,9 @@ from dissect.database.sqlite3.wal import WAL, Checkpoint
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from types import TracebackType
 
+    from typing_extensions import Self
 
 ENCODING = {
     1: "utf-8",
@@ -78,13 +80,11 @@ class SQLite3:
         wal: WAL | Path | BinaryIO | None = None,
         checkpoint: Checkpoint | int | None = None,
     ):
-        # Use the provided file handle or try to open the file path.
-        if hasattr(fh, "read"):
-            name = getattr(fh, "name", None)
-            path = Path(name) if name else None
-        else:
+        if isinstance(fh, Path):
             path = fh
             fh = path.open("rb")
+        else:
+            path = None
 
         self.fh = fh
         self.path = path
@@ -105,12 +105,21 @@ class SQLite3:
             raise InvalidDatabase("Usable page size is too small")
 
         if wal:
-            self.wal = WAL(wal) if not isinstance(wal, WAL) else wal
-        elif path:
+            self.wal = wal if isinstance(wal, WAL) else WAL(wal)
+        else:
             # Check for WAL sidecar next to the DB.
-            wal_path = path.with_name(f"{path.name}-wal")
-            if wal_path.exists():
-                self.wal = WAL(wal_path)
+            # If we have a path, we can deduce the WAL path.
+            # If we don't have a path, we can try to get it from the file handle.
+            if path is None:
+                # By deducing the path at this point and not earlier, we can keep the original passed
+                # path to indicate if we should close the file handle later on.
+                name = getattr(fh, "name", None)
+                path = Path(name) if name else None
+
+            if path is not None:
+                wal_path = path.with_name(f"{path.name}-wal")
+                if wal_path.exists() and wal_path.stat().st_size > 0:
+                    self.wal = WAL(wal_path)
 
         # If a checkpoint index was provided, resolve it to a Checkpoint object.
         if self.wal and isinstance(checkpoint, int):
@@ -121,6 +130,23 @@ class SQLite3:
             self.checkpoint = checkpoint
 
         self.page = lru_cache(256)(self.page)
+
+    def __enter__(self) -> Self:
+        """Return ``self`` upon entering the runtime context."""
+        return self
+
+    def __exit__(self, _: type[BaseException] | None, __: BaseException | None, ___: TracebackType | None) -> bool:
+        self.close()
+        return False
+
+    def close(self) -> None:
+        """Close the database and WAL."""
+        # Only close DB handle if we opened it using a path
+        if self.path is not None:
+            self.fh.close()
+
+        if self.wal is not None:
+            self.wal.close()
 
     def checkpoints(self) -> Iterator[SQLite3]:
         """Yield instances of the database at all available checkpoints in the WAL file, if applicable."""
