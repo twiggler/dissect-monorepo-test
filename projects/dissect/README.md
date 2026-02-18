@@ -41,13 +41,14 @@ Join our [Discord server](https://discord.gg/tS48YbzXN7) to connect with the com
 
 Dissect currently consists of the following projects.
 
+- [dissect.apfs](https://github.com/fox-it/dissect.apfs)
 - [dissect.archive](https://github.com/fox-it/dissect.archive)
 - [dissect.btrfs](https://github.com/fox-it/dissect.btrfs)
 - [dissect.cim](https://github.com/fox-it/dissect.cim)
 - [dissect.clfs](https://github.com/fox-it/dissect.clfs)
 - [dissect.cramfs](https://github.com/fox-it/dissect.cramfs)
 - [dissect.cstruct](https://github.com/fox-it/dissect.cstruct)
-- [dissect.esedb](https://github.com/fox-it/dissect.esedb)
+- [dissect.database](https://github.com/fox-it/dissect.database)
 - [dissect.etl](https://github.com/fox-it/dissect.etl)
 - [dissect.eventlog](https://github.com/fox-it/dissect.eventlog)
 - [dissect.evidence](https://github.com/fox-it/dissect.evidence)
@@ -63,7 +64,6 @@ Dissect currently consists of the following projects.
 - [dissect.qnxfs](https://github.com/fox-it/dissect.qnxfs)
 - [dissect.regf](https://github.com/fox-it/dissect.regf)
 - [dissect.shellitem](https://github.com/fox-it/dissect.shellitem)
-- [dissect.sql](https://github.com/fox-it/dissect.sql)
 - [dissect.squashfs](https://github.com/fox-it/dissect.squashfs)
 - [dissect.target](https://github.com/fox-it/dissect.target)
 - [dissect.thumbcache](https://github.com/fox-it/dissect.thumbcache)
