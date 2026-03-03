@@ -190,7 +190,11 @@ def test_pointer_array(cs: cstruct, compiled: bool) -> None:
     struct mainargs {
         uint8_t argc;
         char *args[4];
+<<<<<<< HEAD
     }
+=======
+    };
+>>>>>>> Rewrite lexer and parser
     """
     cs.pointer = cs.uint16
     cs.load(cdef, compiled=compiled)

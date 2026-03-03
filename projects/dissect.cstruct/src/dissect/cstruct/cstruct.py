@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
+<<<<<<< HEAD
 from dissect.cstruct.parser import CStyleParser, TokenParser
+=======
+from dissect.cstruct.parser import CStyleParser
+>>>>>>> Rewrite lexer and parser
 from dissect.cstruct.types import (
     LEB128,
     BaseArray,
@@ -267,9 +271,15 @@ class cstruct:
         deftype = deftype or cstruct.DEF_CSTYLE
 
         if deftype == cstruct.DEF_CSTYLE:
+<<<<<<< HEAD
             TokenParser(self, **kwargs).parse(definition)
         elif deftype == cstruct.DEF_LEGACY:
             CStyleParser(self, **kwargs).parse(definition)
+=======
+            CStyleParser(self, **kwargs).parse(definition)
+        else:
+            raise ValueError(f"Unknown definition type: {deftype}")
+>>>>>>> Rewrite lexer and parser
 
         return self
 

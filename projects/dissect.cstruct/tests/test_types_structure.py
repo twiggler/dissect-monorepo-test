@@ -9,7 +9,11 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+<<<<<<< HEAD
 from dissect.cstruct.exceptions import ParserError
+=======
+from dissect.cstruct.exceptions import ResolveError
+>>>>>>> Rewrite lexer and parser
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
@@ -216,6 +220,7 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     """
     cs.load(cdef, compiled=compiled)
 
+<<<<<<< HEAD
     assert verify_compiled(cs.test, compiled)
 
     assert cs._test == cs.test == cs.test1
@@ -225,13 +230,33 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     assert "a" in cs.test.fields
     assert "b" in cs.test.fields
 
+=======
+    assert verify_compiled(cs._test, compiled)
+    assert cs._test.__name__ == "_test"
+
+    # test and test1 are variable names, not type names, so they should not be registered in the cstruct
+    with pytest.raises(ResolveError, match="Unknown type test"):
+        assert cs.resolve("test")
+
+    with pytest.raises(ResolveError, match="Unknown type test1"):
+        assert cs.resolve("test1")
+
+    assert "a" in cs._test.fields
+    assert "b" in cs._test.fields
+
+    # This will work but is kind of pointless
+>>>>>>> Rewrite lexer and parser
     cdef = """
     struct {
         uint32  a;
     };
     """
+<<<<<<< HEAD
     with pytest.raises(ParserError, match="struct has no name"):
         cs.load(cdef)
+=======
+    cs.load(cdef)
+>>>>>>> Rewrite lexer and parser
 
 
 def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:

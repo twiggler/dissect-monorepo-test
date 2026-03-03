@@ -5,6 +5,13 @@ class Error(Exception):
     pass
 
 
+<<<<<<< HEAD
+=======
+class LexerError(Error):
+    pass
+
+
+>>>>>>> Rewrite lexer and parser
 class ParserError(Error):
     pass
 
@@ -23,7 +30,10 @@ class ArraySizeError(Error):
 
 class ExpressionParserError(Error):
     pass
+<<<<<<< HEAD
 
 
 class ExpressionTokenizerError(Error):
     pass
+=======
+>>>>>>> Rewrite lexer and parser

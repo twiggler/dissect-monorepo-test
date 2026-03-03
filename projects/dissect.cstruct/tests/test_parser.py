@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
 from unittest.mock import Mock
 
 import pytest
@@ -7,17 +8,67 @@ import pytest
 from dissect.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.parser import TokenParser
+=======
+import pytest
+
+from dissect.cstruct import cstruct
+from dissect.cstruct.exceptions import ParserError, ResolveError
+from dissect.cstruct.lexer import tokenize
+>>>>>>> Rewrite lexer and parser
 from dissect.cstruct.types import BaseArray, Pointer, Structure
 from tests.utils import verify_compiled
 
 
+<<<<<<< HEAD
 def test_nested_structs(cs: cstruct, compiled: bool) -> None:
+=======
+def test_struct(cs: cstruct, compiled: bool) -> None:
+    """Test parsing of a simple struct."""
+    cdef = """
+    struct test {
+        uint8  a;
+        uint16 b;
+    };
+
+    struct test1 {
+        uint8  a;
+    } test2, *test3;
+
+    struct {
+        uint32 _;
+    } b, c, **d;
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.resolve("test") is cs.test
+    assert cs.resolve("test1") is cs.test1
+
+    # test2, test3, b, c and d are variable names, so they should be silently ignored
+    for name in ("test2", "test3", "b", "c", "d"):
+        with pytest.raises(ResolveError, match=f"Unknown type {name}"):
+            cs.resolve(name)
+
+
+def test_nested_structs(cs: cstruct, compiled: bool) -> None:
+    """Test parsing of nested structs, including anonymous ones."""
+>>>>>>> Rewrite lexer and parser
     cdef = """
     struct nest {
         struct {
             uint32 b;
         } a[4];
     };
+<<<<<<< HEAD
+=======
+
+    struct also_nest {
+        struct named {
+            uint32 c;
+        } d;
+    };
+>>>>>>> Rewrite lexer and parser
     """
     cs.load(cdef, compiled=compiled)
 
@@ -31,6 +82,11 @@ def test_nested_structs(cs: cstruct, compiled: bool) -> None:
     assert cs.nest.fields["a"].type.__name__ == "__anonymous_0__[4]"
     assert cs.nest.fields["a"].type.type.__name__ == "__anonymous_0__"
 
+<<<<<<< HEAD
+=======
+    assert cs.also_nest.fields["d"].type == cs.named
+
+>>>>>>> Rewrite lexer and parser
 
 def test_preserve_comment_newlines() -> None:
     cdef = """
@@ -43,6 +99,7 @@ def test_preserve_comment_newlines() -> None:
      */
     #define multi_anchor
     """
+<<<<<<< HEAD
     data = TokenParser._remove_comments(cdef)
 
     mock_token = Mock()
@@ -52,6 +109,18 @@ def test_preserve_comment_newlines() -> None:
 
     mock_token.match.start.return_value = data.index("#define multi_anchor")
     assert TokenParser._lineno(mock_token) == 9
+=======
+
+    tokens = tokenize(cdef)
+
+    # Verify that comment removal preserves line numbers
+    # by checking that the anchors appear on the correct lines
+    for t in tokens:
+        if t.value == "normal_anchor":
+            assert t.line == 3
+        if t.value == "multi_anchor":
+            assert t.line == 9
+>>>>>>> Rewrite lexer and parser
 
 
 def test_typedef_types(cs: cstruct) -> None:
@@ -99,12 +168,17 @@ def test_dynamic_substruct_size(cs: cstruct) -> None:
     assert cs.test.dynamic
 
 
+<<<<<<< HEAD
 def test_structure_names(cs: cstruct) -> None:
+=======
+def test_struct_names(cs: cstruct) -> None:
+>>>>>>> Rewrite lexer and parser
     cdef = """
     struct a {
         uint32 _;
     };
 
+<<<<<<< HEAD
     struct {
         uint32 _;
     } b;
@@ -116,16 +190,34 @@ def test_structure_names(cs: cstruct) -> None:
     typedef struct {
         uint32 _;
     } e;
+=======
+    typedef struct {
+        uint32 _;
+    } b;
+
+    typedef struct c {
+        uint32 _;
+    } d, e;
+>>>>>>> Rewrite lexer and parser
     """
     cs.load(cdef)
 
     assert all(c in cs.typedefs for c in ("a", "b", "c", "d", "e"))
 
     assert cs.a.__name__ == "a"
+<<<<<<< HEAD
     assert cs.b.__name__ == "b"
     assert cs.c.__name__ == "c"
     assert cs.d.__name__ == "c"
     assert cs.e.__name__ == "e"
+=======
+    # For convenience, unnamed structs get the same name as their typedef if they have one
+    assert cs.b.__name__ == "b"
+    # These all refer to the same underlying struct
+    assert cs.c.__name__ == "c"
+    assert cs.d.__name__ == "c"
+    assert cs.e.__name__ == "c"
+>>>>>>> Rewrite lexer and parser
 
 
 def test_includes(cs: cstruct) -> None:
@@ -282,7 +374,11 @@ def test_conditional_parsing_error(cs: cstruct) -> None:
     };
     #endif
     """
+<<<<<<< HEAD
     with pytest.raises(ParserError, match=r"line 8: unexpected token .+ENDIF"):
+=======
+    with pytest.raises(ParserError, match="line 8: #endif without matching #ifdef/#ifndef"):
+>>>>>>> Rewrite lexer and parser
         cs.load(cdef)
 
     cdef = """
@@ -292,5 +388,42 @@ def test_conditional_parsing_error(cs: cstruct) -> None:
         uint32 a;
     };
     """
+<<<<<<< HEAD
     with pytest.raises(ParserError, match="line 6: unclosed conditional statement"):
         cs.load(cdef)
+=======
+    with pytest.raises(ParserError, match="line 2: unclosed conditional statement"):
+        cs.load(cdef)
+
+
+def test_multiline_define(cs: cstruct) -> None:
+    """Test parsing of multi-line ``#define`` directives."""
+    cdef = """
+    #define MULTILINE_DEF (1 + \\
+                          2 + \\
+                          3)
+    """
+    cs.load(cdef)
+
+    assert "MULTILINE_DEF" in cs.consts
+    assert cs.consts["MULTILINE_DEF"] == 6
+
+
+def test_multiple_declarators(cs: cstruct) -> None:
+    """Test parsing of multiple declarators in a single struct field declaration."""
+    cdef = """
+    struct test {
+        uint32 a, b, c;
+        struct { uint8 _; } d, e;
+    };
+    """
+    cs.load(cdef)
+
+    assert "test" in cs.typedefs
+    assert all(field in cs.test.fields for field in ("a", "b", "c", "d", "e"))
+    assert cs.test.fields["a"].type == cs.uint32
+    assert cs.test.fields["b"].type == cs.uint32
+    assert cs.test.fields["c"].type == cs.uint32
+    assert cs.test.fields["d"].type.__name__ == "__anonymous_0__"
+    assert cs.test.fields["e"].type is cs.test.fields["d"].type
+>>>>>>> Rewrite lexer and parser

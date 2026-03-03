@@ -44,7 +44,11 @@ if TYPE_CHECKING:
                 B = ...
 
             """,
+<<<<<<< HEAD
             id="enum int8",
+=======
+            id="enum-int8",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -154,7 +158,11 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
+<<<<<<< HEAD
             id="anonymous nested",
+=======
+            id="anonymous-nested",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -182,7 +190,11 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
+<<<<<<< HEAD
             id="named nested",
+=======
+            id="named-nested",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -210,7 +222,11 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
+<<<<<<< HEAD
             id="named nested array",
+=======
+            id="named-nested-array",
+>>>>>>> Rewrite lexer and parser
         ),
     ],
 )
@@ -253,7 +269,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
+<<<<<<< HEAD
             id="cstruct stub",
+=======
+            id="cstruct-stub",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -272,7 +292,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
 
                 _test: TypeAlias = Test
             """,
+<<<<<<< HEAD
             id="alias stub",
+=======
+            id="alias-stub",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -301,7 +325,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,  # noqa: E501
+<<<<<<< HEAD
             id="typedef stub",
+=======
+            id="typedef-stub",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -317,7 +345,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 STRING: Literal['hello'] = ...
                 BYTES: Literal[b'c'] = ...
             """,
+<<<<<<< HEAD
             id="define literals",
+=======
+            id="define-literals",
+>>>>>>> Rewrite lexer and parser
         ),
         pytest.param(
             """
@@ -337,7 +369,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 Test: TypeAlias = _Test
                 pTest: TypeAlias = Pointer[cstruct._Test]
             """,
+<<<<<<< HEAD
             id="pointer alias",
+=======
+            id="pointer-alias",
+>>>>>>> Rewrite lexer and parser
         ),
     ],
 )
@@ -366,7 +402,11 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
         struct Test {
             uint32  a;
             uint32  b;
+<<<<<<< HEAD
         }
+=======
+        };
+>>>>>>> Rewrite lexer and parser
         \"\"\"
 
         c_structure = cstruct().load(structure_def)
