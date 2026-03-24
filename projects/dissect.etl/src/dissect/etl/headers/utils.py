@@ -9,7 +9,6 @@ from dissect.etl.headers.headers import (
     ErrorHeader,
     EventInstanceGUIDHeader,
     EventTraceHeader,
-    Header,
     InvalidHeader,
     Marker,
     MessageTraceHeader,
@@ -23,6 +22,9 @@ from dissect.etl.headers.system import (
 
 if TYPE_CHECKING:
     from dissect.etl.etl import ETL
+    from dissect.etl.headers.headers import (
+        Header,
+    )
 
 HEADERS: dict[int, Header] = {
     c_etl.TRACE_HEADER_TYPE_SYSTEM32: SystemHeader,
@@ -45,7 +47,7 @@ HEADERS: dict[int, Header] = {
 
 
 def select_event_header(data: memoryview, etl: ETL) -> Header:
-    """Select event header with marker"""
+    """Select event header with marker."""
     marker_int = c_etl.uint32(data[:4])
 
     if marker_int == 0xFFFFFFFF:
