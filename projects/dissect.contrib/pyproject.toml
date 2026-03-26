@@ -3,6 +3,7 @@ requires = ["setuptools>=65.5.0", "setuptools_scm[toml]>=6.4.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
+version = "1.8"
 name = "dissect.contrib"
 description = "This project is a meta package: it reserves the namespace for Dissect packages made by external contributors"
 readme = "README.md"
@@ -24,7 +25,6 @@ classifiers = [
   "Topic :: Security",
   "Topic :: Utilities",
 ]
-dynamic = ["version"]
 
 [project.urls]
 homepage = "https://dissect.tools"
@@ -44,4 +44,3 @@ license-files = ["LICENSE", "COPYRIGHT"]
 [tool.setuptools.packages.find]
 include = ["dissect.*"]
 
-[tool.setuptools_scm]

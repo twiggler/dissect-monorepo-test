@@ -3,6 +3,7 @@ requires = ["setuptools>=77.0.0", "setuptools_scm[toml]>=6.4.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
+version = "3.11"
 name = "dissect.eventlog"
 description = "A Dissect module implementing parsers for the Windows EVT, EVTX and WEVT log file formats"
 readme = "README.md"
@@ -28,7 +29,6 @@ dependencies = [
     "dissect.cstruct>=4,<5",
     "dissect.util>=3,<4",
 ]
-dynamic = ["version"]
 
 [project.urls]
 homepage = "https://dissect.tools"
@@ -43,7 +43,6 @@ dev = [
 
 [dependency-groups]
 test = [
-    "pytest",
 ]
 lint = [
     "black==23.1.0",
@@ -72,5 +71,14 @@ known_third_party = ["dissect"]
 
 [tool.setuptools.packages.find]
 include = ["dissect.*"]
+where = ["src"]
 
-[tool.setuptools_scm]
+
+[tool.uv.sources."dissect.cstruct"]
+workspace = true
+
+[tool.uv.sources."dissect.util"]
+workspace = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
