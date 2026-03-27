@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.util import ts
 from dissect.util.compression import lzo
-from dissect.util.stream import AlignedStream, RunlistStream
+from dissect.util.stream import AlignedStream
 
 from dissect.jffs.c_jffs2 import DT_MAP, JFFS2_MAGIC_NUMBERS, c_jffs2
 from dissect.jffs.exceptions import (
@@ -23,6 +23,8 @@ from dissect.jffs.exceptions import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
+
+    from dissect.util.stream import RunlistStream
 
 log = logging.getLogger(__name__)
 log.setLevel(os.getenv("DISSECT_LOG_JFFS", "CRITICAL"))
