@@ -5,12 +5,43 @@
 #   just test-affected
 #   just test-affected origin/master 3.11
 
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+
+# Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
+# Specify individual package names or 'all'.
+# Pass '--index testpypi' to publish to TestPyPI instead.
+# Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
+# Example: just release all
+# Example: just release dissect.util dissect.cstruct
+# Example: just release all --index testpypi
+release +args:
+    .monorepo/release.sh {{args}}
+
+# List workspace packages whose current version has no release tag (i.e. not yet published).
+# Pass --names to get a bare newline-separated list of package names only.
+pending-releases *args:
+    .monorepo/pending_releases.sh {{args}}
 
 # Update the version specifier for an internal dependency across all projects.
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
 set-constraint package specifier:
     uv run .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+
+# Bump the minor version of one or more workspace packages.
+# Specify individual package names, or 'all' to bump every workspace member.
+# Refuses to bump any package whose current version has no release tag yet —
+# release pending packages first to avoid double-bumps.
+# Example: just bump dissect.util dissect.cstruct
+# Example: just bump all
+bump +packages:
+    .monorepo/bump.sh {{packages}}
+    uv lock
+
+# Regenerate the dissect meta-package dependency list from current workspace versions.
+update-meta:
+    uv run .monorepo/update_meta_deps.py
 
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
