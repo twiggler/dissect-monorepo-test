@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dissect.qnxfs.c_qnx4 import c_qnx4
 from dissect.qnxfs.c_qnx6 import c_qnx6, c_qnx6_be, c_qnx6_le
 from dissect.qnxfs.exceptions import (
