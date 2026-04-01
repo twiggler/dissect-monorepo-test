@@ -63,9 +63,12 @@ where = ["src"]
 
 [[tool.setuptools-rust.ext-modules]]
 target = "dissect.util._native"
-path = "dissect/util/_native.src/Cargo.toml"
+path = "src/dissect/util/_native.src/Cargo.toml"
 features = ["pyo3/extension-module"]
 strip = "All"
+
+[tool.monorepo]
+native = true
 
 [tool.ruff]
 extend = "../../ruff.toml"

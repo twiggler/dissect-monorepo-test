@@ -78,7 +78,7 @@ where = ["src"]
 
 [[tool.setuptools-rust.ext-modules]]
 target = "dissect.fve._native"
-path = "dissect/fve/_native.src/Cargo.toml"
+path = "src/dissect/fve/_native.src/Cargo.toml"
 features = ["pyo3/extension-module"]
 strip = "All"
 
@@ -101,3 +101,6 @@ known-third-party = ["dissect"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.monorepo]
+native = true
