@@ -1,0 +1,110 @@
+# Reusable workflow — build native (Rust) wheels via cibuildwheel across all platforms.
+#
+# Callers control two knobs:
+#   include-slow-arches — when true, builds QEMU-emulated arches (i686, ppc64le, s390x,
+#                         armv7l) in addition to x86_64. The full arch list is read from
+#                         [tool.monorepo.native] in pyproject.toml. Use false for fast
+#                         push/PR builds (host-only, no QEMU).
+#   upload-artifacts    — upload built wheels as GitHub Actions artifacts so a
+#                         subsequent publish job can collect and upload them to PyPI.
+
+
+on:
+  workflow_call:
+    inputs:
+      include-slow-arches:
+        description: >
+          Build QEMU-emulated Linux x86 arches (i686, ppc64le, s390x, armv7l) in
+          addition to the native x86_64. Uses [tool.monorepo.native.linux-x86-archs]
+          from pyproject.toml when true, linux-x86-archs-pr when false.
+        type: boolean
+        default: false
+      upload-artifacts:
+        description: "Upload built wheels as GitHub Actions artifacts for a subsequent publish job."
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build / ${{ matrix.platform }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            platform: linux-aarch64
+            archs: aarch64
+          - runner: macos-latest
+            platform: macos-arm64
+            archs: arm64
+          - runner: macos-15-intel
+            platform: macos-x86_64
+            archs: x86_64
+          - runner: windows-latest
+            platform: windows-amd64
+            archs: AMD64
+          - runner: windows-latest
+            platform: windows-x86
+            archs: x86
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/lfs-pull
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - uses: extractions/setup-just@v2
+
+      # Read the arch list and compute the QEMU platform string from pyproject.toml.
+      # Only needed on the Linux x86_64 runner; all other arches are static in the matrix.
+      - name: Read native config
+        id: config
+        if: matrix.platform == 'linux-x86_64'
+        shell: bash
+        run: |
+          slow_flag=${{ inputs.include-slow-arches && '--slow' || '' }}
+          python .monorepo/resolve_linux_archs.py $slow_flag
+
+      # Only the Linux x86_64 runner ever needs QEMU, and only when building beyond x86_64.
+      # The platform list is derived from the arch list in pyproject.toml (see step above).
+      - name: Set up QEMU
+        if: matrix.platform == 'linux-x86_64' && steps.config.outputs.needs-qemu == 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ steps.config.outputs.qemu-platforms }}
+
+      # The linux-x86_64 matrix entry has no static 'archs' field — resolve from config output.
+      - name: Resolve archs
+        id: archs
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == "linux-x86_64" ]]; then
+            echo "value=${{ steps.config.outputs.linux-x86-archs }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ matrix.archs }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install bash 5 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash
+
+      - name: Build native wheels
+        run: just test-native-wheels "${{ steps.archs.outputs.value }}"
+
+      - name: Upload wheels
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
