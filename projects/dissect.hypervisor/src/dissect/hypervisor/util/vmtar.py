@@ -76,6 +76,8 @@ class VisorTarFile(tarfile.TarFile):
         try:
             t = cls.taropen(name, mode, fileobj, **kwargs)
         except Exception:
+            if fileobj is not None:
+                fileobj.seek(0)
             try:
                 fileobj = GzipFile(name, mode + "b", fileobj=fileobj)
             except OSError as e:
@@ -103,10 +105,14 @@ class VisorTarFile(tarfile.TarFile):
             compressed = True
 
         # If we get here, we have a valid visor tar file
-        if fileobj is not None and compressed:
-            # Just read the entire file into memory, it's probably small
-            fileobj.seek(0)
-            fileobj = BytesIO(fileobj.read())
+        if fileobj is not None:
+            if compressed:
+                # GzipFile/LZMAFile are not seekable, but TarFile requires seek/tell.
+                # Read the decompressed data into a BytesIO to make it seekable.
+                fileobj.seek(0)
+                fileobj = BytesIO(fileobj.read())
+            else:
+                fileobj.seek(0)
 
         t = cls.taropen(name, mode, fileobj, **kwargs)
 
