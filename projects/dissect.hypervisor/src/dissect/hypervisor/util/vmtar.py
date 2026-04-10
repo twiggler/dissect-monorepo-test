@@ -22,9 +22,8 @@ class VisorTarInfo(tarfile.TarInfo):
     fixUpPgs: int | None
 
     @classmethod
-    def frombuf(cls, buf: bytes, encoding: str, errors: str) -> VisorTarInfo:
-        obj = super().frombuf(buf, encoding, errors)
-
+    def _init_visor_attrs(cls, obj: VisorTarInfo, buf: bytes) -> None:
+        """Initialize visor-specific attributes from the raw header buffer."""
         obj.is_visor = buf[257:264] == b"visor  "
         if obj.is_visor:
             obj.offset_data = struct.unpack("<I", buf[496:500])[0]
@@ -35,6 +34,19 @@ class VisorTarInfo(tarfile.TarInfo):
             obj.textPgs = None
             obj.fixUpPgs = None
 
+    @classmethod
+    def frombuf(cls, buf: bytes, encoding: str, errors: str) -> VisorTarInfo:
+        obj = super().frombuf(buf, encoding, errors)
+        cls._init_visor_attrs(obj, buf)
+        return obj
+
+    @classmethod
+    def _frombuf(cls, buf: bytes, encoding: str, errors: str, **kwargs) -> VisorTarInfo:
+        # Python 3.13.13+ refactored tarfile to call _frombuf directly instead of
+        # frombuf in fromtarfile and _proc_gnulong/_proc_pax. We must override _frombuf
+        # to ensure visor-specific attributes are initialized for all code paths.
+        obj = super()._frombuf(buf, encoding, errors, **kwargs)
+        cls._init_visor_attrs(obj, buf)
         return obj
 
     def _proc_member(self, tarfile: tarfile.TarFile) -> VisorTarInfo | tarfile.TarInfo:
