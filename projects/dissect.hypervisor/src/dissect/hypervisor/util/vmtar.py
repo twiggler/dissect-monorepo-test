@@ -37,12 +37,7 @@ class VisorTarInfo(tarfile.TarInfo):
     @classmethod
     def frombuf(cls, buf: bytes, encoding: str, errors: str) -> VisorTarInfo:
         obj = super().frombuf(buf, encoding, errors)
-        # In Python < 3.13.13, frombuf is the entry point for header parsing.
-        # In Python >= 3.13.13, frombuf calls _frombuf (our override) which already
-        # sets visor attrs, so this is a no-op for those versions but kept for
-        # backward compatibility.
-        if not hasattr(obj, "is_visor"):
-            cls._init_visor_attrs(obj, buf)
+        cls._init_visor_attrs(obj, buf)
         return obj
 
     @classmethod
