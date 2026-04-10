@@ -35,30 +35,6 @@ homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.thumbcache"
 repository = "https://github.com/fox-it/dissect.thumbcache"
 
-[project.optional-dependencies]
-dev = [
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
-
 [project.scripts]
 thumbcache-extract = "dissect.thumbcache.tools.extract_images:main"
 thumbcache-extract-indexed = "dissect.thumbcache.tools.extract_with_index:main"

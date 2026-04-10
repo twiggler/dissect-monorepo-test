@@ -41,30 +41,6 @@ full = [
     "pycryptodome",
     "backports.zstd; python_version < '3.14'",
 ]
-dev = [
-    "dissect.hypervisor[full]",
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "vermin",
-    "typing_extensions",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
 
 [project.scripts]
 envelope-decrypt = "dissect.hypervisor.tools.envelope:main"

@@ -32,30 +32,6 @@ documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
 repository = "https://github.com/fox-it/dissect.cstruct"
 changelog = "https://github.com/fox-it/dissect.cstruct/blob/main/CHANGELOG.md"
 
-[project.optional-dependencies]
-dev = [
-  "typing_extensions"
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "typing_extensions",
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
-
 [project.scripts]
 cstruct-stubgen = "dissect.cstruct.tools.stubgen:main"
 

@@ -35,30 +35,6 @@ homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.ole"
 repository = "https://github.com/fox-it/dissect.ole"
 
-[project.optional-dependencies]
-dev = [
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
-
 [tool.setuptools.packages.find]
 include = ["dissect.*"]
 where = ["src"]

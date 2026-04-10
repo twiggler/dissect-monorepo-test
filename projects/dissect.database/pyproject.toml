@@ -39,30 +39,6 @@ repository = "https://github.com/fox-it/dissect.database"
 full = [
     "pycryptodome"
 ]
-dev = [
-    "dissect.database[full]",
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.24,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "vermin",
-    "typing_extensions",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
 
 [project.scripts]
 dissect-ntds = "dissect.database.ese.ntds.tools.ntds:main"

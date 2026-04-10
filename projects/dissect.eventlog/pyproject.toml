@@ -35,32 +35,6 @@ homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.eventlog"
 repository = "https://github.com/fox-it/dissect.eventlog"
 
-[project.optional-dependencies]
-dev = [
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "black==23.1.0",
-    "isort==5.11.4",
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
-
 [tool.black]
 line-length = 120
 

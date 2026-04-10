@@ -39,29 +39,6 @@ repository = "https://github.com/fox-it/dissect.squashfs"
 full = [
     "backports.zstd; python_version < '3.14'",
 ]
-dev = [
-    "dissect.squashfs[full]",
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-]
-lint = [
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
 
 [tool.setuptools.packages.find]
 include = ["dissect.*"]

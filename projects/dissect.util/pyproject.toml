@@ -33,24 +33,6 @@ documentation = "https://docs.dissect.tools/en/latest/projects/dissect.util"
 repository = "https://github.com/fox-it/dissect.util"
 
 
-[dependency-groups]
-test = [
-]
-lint = [
-  "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
-
 [project.scripts]
 dump-nskeyedarchiver = "dissect.util.tools.dump_nskeyedarchiver:main"
 

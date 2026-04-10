@@ -39,29 +39,6 @@ repository = "https://github.com/fox-it/dissect.evidence"
 full = [
     "pycryptodome",
 ]
-dev = [
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.0.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-    "pycryptodome",
-]
-lint = [
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
 
 [project.scripts]
 asdf-dd = "dissect.evidence.tools.asdf.dd:main"
@@ -93,3 +70,8 @@ required-imports = ["from __future__ import annotations"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pycryptodome",
+]
