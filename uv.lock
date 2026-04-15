@@ -1031,11 +1031,8 @@ dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "typing-extensions" },
     { name = "vermin" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-xdist" },
 ]
 
 [package.metadata]
@@ -1045,11 +1042,8 @@ dev = [
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-xdist", specifier = ">=3" },
     { name = "ruff", specifier = "==0.13.1" },
+    { name = "typing-extensions" },
     { name = "vermin", specifier = ">=1.6.0" },
-]
-test = [
-    { name = "pytest", specifier = ">=8.4.0" },
-    { name = "pytest-xdist", specifier = ">=3" },
 ]
 
 [[package]]
