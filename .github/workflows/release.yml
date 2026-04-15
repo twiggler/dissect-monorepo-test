@@ -21,9 +21,7 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-permissions:
-  id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
-  contents: write  # push git tags
+permissions: {}
 
 env:
   PYTHON_VERSION: "3.14"
@@ -34,28 +32,31 @@ jobs:
     # Each index maps to a GitHub environment of the same name.
     # Store a PyPI API token as UV_PUBLISH_TOKEN in each environment's secrets.
     environment: ${{ inputs.index }}_release
+    permissions:
+      id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
+      contents: write  # push git tags
     steps:
       # Mint a short-lived installation token for this run.
       # Tags pushed with this token are seen by GitHub as a real user push,
       # so release-native.yml fires automatically via its push:tags trigger.
       - name: Generate app token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # Full history + all tags needed by pending_releases.sh.
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
       - name: Release packages
         id: release

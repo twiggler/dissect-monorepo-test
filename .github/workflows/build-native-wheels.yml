@@ -31,6 +31,8 @@ on:
         type: boolean
         default: false
 
+permissions: {}
+
 jobs:
   # Generate the build matrix. Linux x86 arches are split one-per-runner (parallel QEMU).
   # All other platforms are static entries appended by the script.
@@ -42,13 +44,13 @@ jobs:
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Generate build matrix
         id: gen
-        run: |
-          slow_flag=${{ inputs.include-slow-arches && '--slow' || '' }}
-          python3 .monorepo/resolve_linux_archs.py $slow_flag
+        env:
+          SLOW_FLAG: ${{ inputs.include-slow-arches && '--slow' || '' }}
+        run: python3 .monorepo/resolve_linux_archs.py $SLOW_FLAG
 
   build:
     name: Build / ${{ matrix.platform }}
@@ -61,22 +63,22 @@ jobs:
         include: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/lfs-pull
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - uses: extractions/setup-just@v4
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
       - name: Set up QEMU
         if: matrix.needs-qemu == 'true'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
         with:
           platforms: ${{ matrix.qemu-platform }}
 
@@ -92,7 +94,7 @@ jobs:
 
       - name: Upload wheels
         if: inputs.upload-artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.platform }}
           path: dist/

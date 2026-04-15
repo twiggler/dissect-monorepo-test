@@ -6,6 +6,7 @@
 #   just test-affected origin/master 3.11
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
+tooling_python := `cat .monorepo/tooling-python`
 
 
 # Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
@@ -36,7 +37,7 @@ pending-releases *args:
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
 set-constraint package specifier:
-    uv run --python ">=3.12" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+    uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
 # Bump the minor version of one or more workspace packages.
 # Specify individual package names, or 'all' to bump every workspace member.
@@ -50,7 +51,7 @@ bump +packages:
 
 # Regenerate the dissect meta-package dependency list from current workspace versions.
 update-meta:
-    uv run --python ">=3.12" .monorepo/update_meta_deps.py
+    uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
 
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
@@ -78,6 +79,8 @@ fix:
 # Run pytest for a single project using `uv` to create the environment.
 # --all-packages installs all workspace members as editable so sibling deps are importable.
 # --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
+# -n auto (pytest-xdist): distributes tests across one worker process per CPU core.
+#   Tests run concurrently; order is non-deterministic; each worker is a fresh subprocess.
 # Example: just test dissect.xfs 3.11
 # Example: just test dissect.xfs 3.11 "-k test_foo"
 test project env args="":
@@ -108,7 +111,7 @@ test-all env="3.10" args="":
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t envs < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
+    mapfile -t envs < <(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format versions)
     for env in "${envs[@]}"; do
         echo "=== Testing with Python $env ==="
         just test-all "$env"
@@ -119,7 +122,7 @@ test-all-envs:
 test-affected ref="origin/master" env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    packages=$(git diff --name-only {{ref}} | uv run --python ">=3.12" .monorepo/affected_tests.py)
+    packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No packages affected. Nothing to do."
         exit 0
@@ -145,7 +148,7 @@ build-native-inplace project env="3.10":
 build-all-native-inplace env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    mapfile -t native_projects < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
     if [[ ${#native_projects[@]} -eq 0 ]]; then
         echo "No native projects found."
         exit 0
@@ -194,22 +197,9 @@ build-native-wheels pkg archs="auto":
     set -euo pipefail
     out="dist/{{pkg}}"
     mkdir -p "$out"
-    # Derive CIBW_BUILD identifiers from configured python-versions.
-    # 3.11 -> cp311-*   pypy3.11 -> pp311-*
-    mapfile -t versions < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
-    build_ids=()
-    for v in "${versions[@]}"; do
-        if [[ "$v" == pypy* ]]; then
-            numeric="${v#pypy}"; numeric="${numeric//./}"
-            build_ids+=("pp${numeric}-*")
-        else
-            build_ids+=("cp${v//./}-*")
-        fi
-    done
-    # Append cp3??t-* so free-threaded wheels are built in the same pass as abi3/PyPy.
-    # The config difference (no --py-limited-api) is expressed via
-    # [[tool.cibuildwheel.overrides]] in pyproject.toml — no per-pass env overrides needed.
-    cibw_build="${build_ids[*]} cp3??t-*"
+    # CIBW_BUILD lists CPython abi3 + PyPy identifiers for all configured versions,
+    # plus cp3??t-* for free-threaded wheels — all derived by python_versions.py.
+    cibw_build=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format cibw-build)
     echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
     CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
         uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
@@ -223,36 +213,20 @@ build-native-wheels pkg archs="auto":
         uv tool run abi3audit --strict --report "${abi3_wheels[@]}"
     fi
 
-# Build and test native wheels for all native projects.
+# Build native wheels for all native projects, or a caller-specified subset.
 # archs: "auto" for host arch only (suitable for PRs); space-separated list for
 #        multi-arch builds (caller must configure QEMU first for non-native arches).
+# packages: space-separated package names, or 'all' to build every native package.
 # Example: just test-native-wheels                               # host arch only, all native packages
 # Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
 # Example: just test-native-wheels auto "dissect.util dissect.fve" # specific packages only
 test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t all_native < <(uv run --python ">=3.12" .monorepo/native_projects.py)
-    if [[ ${#all_native[@]} -eq 0 ]]; then
-        echo "No native projects found."
-        exit 0
-    fi
     if [[ "{{packages}}" == "all" ]]; then
-        to_build=("${all_native[@]}")
+        mapfile -t to_build < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
     else
-        read -ra requested <<< "{{packages}}"
-        to_build=()
-        for pkg in "${requested[@]}"; do
-            if printf '%s\n' "${all_native[@]}" | grep -qxF "$pkg"; then
-                to_build+=("$pkg")
-            else
-                echo "[skip] $pkg is not a native project" >&2
-            fi
-        done
-    fi
-    if [[ ${#to_build[@]} -eq 0 ]]; then
-        echo "No native projects to build."
-        exit 0
+        read -ra to_build <<< "{{packages}}"
     fi
     for pkg in "${to_build[@]}"; do
         just build-native-wheels "$pkg" "{{archs}}"

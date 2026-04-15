@@ -7,8 +7,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [dependency-groups]
-test = ["pytest>=8.4.0", "pytest-xdist>=3"]
-dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3"]
+dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3", "typing_extensions"]
 
 [tool.monorepo.test]
 python-versions = ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]
@@ -18,7 +17,7 @@ os = ["ubuntu-latest", "windows-latest"]
 # Arch lists for the Linux x86_64 cibuildwheel runner.
 # linux-x86-archs-pr  — fast subset (host-only, no QEMU) for push/PR builds.
 # linux-x86-archs     — full set (+ QEMU-emulated arches) for nightly/release builds.
-linux-x86-archs-pr = ["x86_64"]
+linux-x86-archs-pr = ["x86_64", "i686"]
 linux-x86-archs = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]
 
 # ---------------------------------------------------------------------------
