@@ -4,7 +4,7 @@ backend-path = ["src/dissect/util"]
 build-backend = "_build"
 
 [project]
-version = "3.24.3"
+version = "3.25.0"
 name = "dissect.util"
 description = "A Dissect module implementing various utility functions for the other Dissect modules"
 readme = "README.md"

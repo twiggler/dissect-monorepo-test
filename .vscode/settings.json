@@ -1,0 +1,41 @@
+{
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ],
+    "python.analysis.extraPaths": [
+        "projects/dissect.apfs/src",
+        "projects/dissect.archive/src",
+        "projects/dissect.btrfs/src",
+        "projects/dissect.cim/src",
+        "projects/dissect.clfs/src",
+        "projects/dissect.cramfs/src",
+        "projects/dissect.cstruct/src",
+        "projects/dissect.database/src",
+        "projects/dissect.etl/src",
+        "projects/dissect.eventlog/src",
+        "projects/dissect.evidence/src",
+        "projects/dissect.executable/src",
+        "projects/dissect.extfs/src",
+        "projects/dissect.fat/src",
+        "projects/dissect.ffs/src",
+        "projects/dissect.fve/src",
+        "projects/dissect.hypervisor/src",
+        "projects/dissect.jffs/src",
+        "projects/dissect.ntfs/src",
+        "projects/dissect.ole/src",
+        "projects/dissect.qnxfs/src",
+        "projects/dissect.regf/src",
+        "projects/dissect.shellitem/src",
+        "projects/dissect.squashfs/src",
+        "projects/dissect.target/src",
+        "projects/dissect.thumbcache/src",
+        "projects/dissect.util/src",
+        "projects/dissect.vmfs/src",
+        "projects/dissect.volume/src",
+        "projects/dissect.xfs/src"
+    ]
+}

@@ -713,7 +713,7 @@ requires-dist = [
 
 [[package]]
 name = "dissect-archive"
-version = "1.8"
+version = "1.9.0"
 source = { editable = "projects/dissect.archive" }
 dependencies = [
     { name = "dissect-cstruct" },
@@ -952,7 +952,7 @@ requires-dist = [
 
 [[package]]
 name = "dissect-fve"
-version = "4.6.1"
+version = "4.7.0"
 source = { editable = "projects/dissect.fve" }
 dependencies = [
     { name = "dissect-cstruct" },
@@ -1048,7 +1048,7 @@ dev = [
 
 [[package]]
 name = "dissect-ntfs"
-version = "3.16"
+version = "3.17.0"
 source = { editable = "projects/dissect.ntfs" }
 dependencies = [
     { name = "dissect-cstruct" },
@@ -1145,7 +1145,7 @@ provides-extras = ["full"]
 
 [[package]]
 name = "dissect-target"
-version = "3.25.1"
+version = "3.26.0"
 source = { editable = "projects/dissect.target" }
 dependencies = [
     { name = "defusedxml" },
@@ -1404,7 +1404,7 @@ requires-dist = [
 
 [[package]]
 name = "dissect-util"
-version = "3.24.3"
+version = "3.25.0"
 source = { editable = "projects/dissect.util" }
 
 [[package]]

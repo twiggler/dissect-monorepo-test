@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-version = "1.8"
+version = "1.9.0"
 name = "dissect.archive"
 description = "A Dissect module implementing parsers for various archive and backup formats"
 readme = "README.md"

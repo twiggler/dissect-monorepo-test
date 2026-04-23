@@ -123,6 +123,18 @@ just bump dissect.util dissect.cstruct
 just bump all
 ```
 
+#### `just bump-auto`
+
+Automatically bump every package that **both** has a release tag for its current version **and** has new commits in its project directory since that tag. Regenerates `uv.lock` afterward.
+
+Packages that are already pending release (no tag for the current version) are silently skipped — they are not an error, because a previous manual bump already covers them.
+
+Useful to prepare all modified packages for release in one step.
+
+```
+just bump-auto
+```
+
 #### `just pending-releases [--names]`
 
 List workspace packages whose current version has no corresponding git release tag (i.e. not yet published). Pass `--names` to get a bare newline-separated list of package names, suitable for scripting.
@@ -211,10 +223,11 @@ Remove all built wheels and sdists from the `dist/` directory. Refuses to run if
 
 ### Releasing a batch of packages
 
-1. **Bump all packages** that have been released since their last bump:
+1. **Auto-bump all packages with new commits** since their last release:
    ```
-   just bump all
+   just bump-auto
    ```
+   This bumps every package that has a release tag for its current version and new commits since that tag. Packages that were already manually bumped (and are therefore pending release) are silently skipped.
 
 2. **Check what is pending**:
    ```
