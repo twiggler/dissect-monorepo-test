@@ -1,9 +1,0 @@
-__pycache__/
-.venv/
-.pytest_cache/
-.tox/
-*.egg-info/
-*.pyc
-.trash/
-.coverage
-coverage.xml

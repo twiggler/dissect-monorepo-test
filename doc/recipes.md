@@ -112,27 +112,16 @@ just release dissect.util dissect.cstruct
 just release all --index testpypi
 ```
 
-#### `just bump <packages|all>`
+#### `just bump <packages|all|auto>`
 
-Bump the minor version of one or more workspace packages and regenerate `uv.lock`. Pass `all` to bump every workspace member.
+Bump the minor version of one or more workspace packages and regenerate `uv.lock`. Pass `all` to bump every workspace member, or `auto` to bump only packages that have new commits since their last release tag.
 
-**Guard**: refuses to bump any package whose current version has no release tag yet — release pending versions first to avoid double-bumps.
+**Guard**: when bumping named packages or `all`, refuses to bump any package whose current version has no release tag yet — release pending versions first to avoid double-bumps. `auto` silently skips pending packages instead of erroring.
 
 ```
 just bump dissect.util dissect.cstruct
 just bump all
-```
-
-#### `just bump-auto`
-
-Automatically bump every package that **both** has a release tag for its current version **and** has new commits in its project directory since that tag. Regenerates `uv.lock` afterward.
-
-Packages that are already pending release (no tag for the current version) are silently skipped — they are not an error, because a previous manual bump already covers them.
-
-Useful to prepare all modified packages for release in one step.
-
-```
-just bump-auto
+just bump auto
 ```
 
 #### `just pending-releases [--names]`
@@ -225,7 +214,7 @@ Remove all built wheels and sdists from the `dist/` directory. Refuses to run if
 
 1. **Auto-bump all packages with new commits** since their last release:
    ```
-   just bump-auto
+   just bump auto
    ```
    This bumps every package that has a release tag for its current version and new commits since that tag. Packages that were already manually bumped (and are therefore pending release) are silently skipped.
 
