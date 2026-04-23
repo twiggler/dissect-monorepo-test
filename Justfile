@@ -31,7 +31,7 @@ clean:
 # List workspace packages whose current version has no release tag (i.e. not yet published).
 # Pass --names to get a bare newline-separated list of package names only.
 pending-releases *args:
-    .monorepo/pending_releases.sh {{args}}
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py pending-releases {{args}}
 
 # Update the version specifier for an internal dependency across all projects.
 # Only modifies projects that already declare the dependency.
@@ -46,7 +46,7 @@ set-constraint package specifier:
 # Example: just bump dissect.util dissect.cstruct
 # Example: just bump all
 bump +packages:
-    .monorepo/bump.sh {{packages}}
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
     uv lock
 
 # Regenerate the dissect meta-package dependency list from current workspace versions.
@@ -75,6 +75,14 @@ lint:
 # Auto-fix ruff issues (vermin has no auto-fix).
 fix:
     just ruff true
+
+# Sync the workspace virtual environment.
+# Creates (or updates) the default venv, installs all workspace packages as
+# editable with all extras and the dev dependency group.
+# Example: just sync
+# Example: just sync 3.12
+sync env="3.10":
+    uv sync --group dev --all-packages --all-extras --python {{env}}
 
 # Run pytest for a single project using `uv` to create the environment.
 # --all-packages installs all workspace members as editable so sibling deps are importable.
