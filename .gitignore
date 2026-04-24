@@ -16,8 +16,9 @@ dist/
 # XML coverage report (consumed by CI/code quality tools)
 coverage.xml
 .pytest_cache/
-# Sphinx API docs generated during test runs
-**/tests/_docs/
+# Sphinx build output and autoapi-generated files produced during docs-check runs
+**/tests/_docs/build/
+**/tests/_docs/api/
 
 # Virtual environments
 .venv/

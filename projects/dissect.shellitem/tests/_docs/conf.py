@@ -12,7 +12,7 @@ exclude_patterns = []
 html_theme = "furo"
 
 autoapi_type = "python"
-autoapi_dirs = ["../../dissect/"]
+autoapi_dirs = ["../../src/dissect/"]
 autoapi_ignore = ["*tests*", "*.tox*", "*venv*", "*examples*"]
 autoapi_python_use_implicit_namespaces = True
 autoapi_add_toctree_entry = False
@@ -23,7 +23,6 @@ autoapi_options = [
     "show-inheritance",
     "show-module-summary",
     "special-members",
-    "imported-members",
 ]
 autoapi_keep_files = True
 autoapi_template_dir = "_templates/autoapi"

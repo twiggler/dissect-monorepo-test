@@ -16,9 +16,17 @@ exclude_patterns = []
 html_theme = "furo"
 
 autoapi_type = "python"
-autoapi_dirs = ["../../dissect/"]
+autoapi_dirs = ["../../src/dissect/"]
 autoapi_ignore = ["*tests*", "*.tox*", "*venv*", "*examples*"]
 autoapi_python_use_implicit_namespaces = True
+suppress_warnings = [
+    # https://github.com/readthedocs/sphinx-autoapi/issues/285
+    "autoapi.python_import_resolution",
+    # Section and SymbolTable are re-exported from elf/__init__.py, causing
+    # autoapi to register them under both dissect.executable.elf.<Class> and
+    # dissect.executable.elf.elf.<Class>. Sphinx flags the resulting
+    # cross-reference as ambiguous.
+]
 autoapi_add_toctree_entry = False
 autoapi_root = "api"
 autoapi_options = [
@@ -27,7 +35,6 @@ autoapi_options = [
     "show-inheritance",
     "show-module-summary",
     "special-members",
-    "imported-members",
 ]
 autoapi_keep_files = True
 autoapi_template_dir = "_templates/autoapi"
