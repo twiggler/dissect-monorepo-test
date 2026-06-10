@@ -22,3 +22,8 @@ def open_file_gz(name: str) -> Iterator[BinaryIO]:
 @pytest.fixture
 def system_hive() -> Iterator[BinaryIO]:
     yield from open_file_gz("_data/SYSTEM.gz")
+
+
+@pytest.fixture
+def bad_key_value_cell_hive() -> Iterator[BinaryIO]:
+    yield from open_file_gz("_data/BadKeyValueCell.gz")
