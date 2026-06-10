@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import BinaryIO
 
 import pytest
@@ -83,3 +84,27 @@ def test_regf(system_hive: BinaryIO) -> None:
 )
 def test_try_decode_sz(data: bytes, expected: str) -> None:
     assert regf.try_decode_sz(data) == expected
+
+
+def test_bad_keyvalue_cell_entry(bad_key_value_cell_hive: BinaryIO, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, regf.log.name):
+        hive = regf.RegistryHive(bad_key_value_cell_hive)
+        root = hive.root()
+
+        assert len(list(root.subkeys())) == 1
+        svc = root.subkey("Service")
+
+        values = list(svc.values())
+
+        assert len(values) == 2
+        value_dict = {v.name: v for v in values}
+
+        assert "Type" in value_dict
+        assert value_dict["Type"].type == 4  # REG_DWORD
+        assert value_dict["Type"].value == 224
+
+        assert "Start" in value_dict
+        assert value_dict["Start"].type == 4  # REG_DWORD
+        assert value_dict["Start"].value == 3
+
+    assert "Invalid cell signature b'6\\x00' at offset 0x130" in caplog.text

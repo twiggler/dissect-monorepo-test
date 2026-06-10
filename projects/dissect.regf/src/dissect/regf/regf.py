@@ -274,7 +274,12 @@ class ValueList:
             if entry <= 2:
                 continue
 
-            yield KeyValue(self.hive, self.hive.cell_data(entry))
+            data = self.hive.cell_data(entry)
+            if data[:2] != KeyValue.__signature__:
+                log.warning("Invalid cell signature %r at offset 0x%x", data[:2], entry)
+                continue
+
+            yield KeyValue(self.hive, data)
 
 
 class KeyValue(Cell):
