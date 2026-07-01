@@ -1,0 +1,147 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    # Nightly at 02:00 UTC — runs full multi-arch native wheel build with QEMU.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      full-native:
+        description: "Run full multi-arch native wheel build (with QEMU)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+
+      - run: just lint
+
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+
+      - run: just docs-check
+
+  generate-matrix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: false
+
+      - name: Generate matrix
+        id: set-matrix
+        run: uv run --python ">=3.11" --no-project --with packaging python .monorepo/python_versions.py --format json >> $GITHUB_OUTPUT
+
+  test:
+    needs: generate-matrix
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Full history needed so git diff can reach the base commit in test-affected.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/lfs-pull
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: ${{ matrix.python-version }}
+
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+
+      - name: Compute base ref
+        id: base-ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: bash .monorepo/compute-base-ref.sh
+
+      - name: Install Rust (native in-place builds)
+        if: ${{ matrix.variant == 'native' }}
+        uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1.16.0
+        with:
+          cache: false
+      - name: Run tests
+        if: ${{ matrix.variant == 'source' }}
+        env:
+          BASE_REF: ${{ steps.base-ref.outputs.ref }}
+          PY_VERSION: ${{ matrix.python-version }}
+        shell: bash
+        run: bash .monorepo/run-tests.sh
+
+      - name: Run native in-place tests
+        if: ${{ matrix.variant == 'native' }}
+        env:
+          BASE_REF: ${{ steps.base-ref.outputs.ref }}
+          PY_VERSION: ${{ matrix.python-version }}
+        shell: bash
+        run: bash .monorepo/run-native-tests.sh
+
+  test-native:
+    # All non-QEMU platforms on every push/PR: Linux x86_64, Linux aarch64,
+    # macOS x86_64, macOS arm64, Windows. No emulation needed.
+    name: Test native wheels
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-native-wheels.yml
+    with:
+      include-slow-arches: false
+
+  test-native-full:
+    # All platforms + QEMU arches (i686, ppc64le, s390x, armv7l) — nightly or manual.
+    name: Test native wheels (full)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full-native)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-native-wheels.yml
+    with:
+      include-slow-arches: true

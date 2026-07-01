@@ -21,24 +21,23 @@ This module is also automatically installed if you install the `dissect` package
 
 ## Build and test instructions
 
-This project uses `tox` to build source and wheel distributions. Run the following command from the root folder to build
-these:
+This project is part of the [dissect monorepo](https://github.com/fox-it/dissect). Building and testing is managed from the monorepo root.
+
+To run the tests for this project, run the following command from the monorepo root:
 
 ```bash
-tox -e build
+just test dissect.extfs
 ```
 
-The build artifacts can be found in the `dist/` directory.
-
-`tox` is also used to run linting and unit tests in a self-contained environment. To run both linting and unit tests
-using the default installed Python version, run:
+To build source and wheel distributions:
 
 ```bash
-tox
+uv build --package dissect.extfs --out-dir dist/dissect.extfs
 ```
 
-For a more elaborate explanation on how to build and test the project, please see [the
-documentation](https://docs.dissect.tools/en/latest/contributing/tooling.html).
+The build artifacts can be found in the `dist/dissect.extfs/` directory.
+
+For a more elaborate explanation on how to build and test the project, please see [the recipes](../../doc/recipes.md) or [the documentation](https://docs.dissect.tools/en/latest/contributing/tooling.html).
 
 ## Contributing
 

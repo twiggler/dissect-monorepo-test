@@ -14,9 +14,13 @@ exclude_patterns = []
 html_theme = "furo"
 
 autoapi_type = "python"
-autoapi_dirs = ["../../dissect/"]
+autoapi_dirs = ["../../src/dissect/"]
 autoapi_ignore = ["*tests*", "*.tox*", "*venv*", "*examples*"]
 autoapi_python_use_implicit_namespaces = True
+suppress_warnings = [
+    # https://github.com/readthedocs/sphinx-autoapi/issues/285
+    "autoapi.python_import_resolution",
+]
 autoapi_add_toctree_entry = False
 autoapi_root = "api"
 autoapi_options = [
@@ -25,7 +29,6 @@ autoapi_options = [
     "show-inheritance",
     "show-module-summary",
     "special-members",
-    "imported-members",
 ]
 autoapi_keep_files = True
 autoapi_template_dir = "_templates/autoapi"

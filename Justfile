@@ -1,0 +1,324 @@
+# Justfile for running tests across the monorepo
+# Usage:
+#   just test-all
+#   just test <project> <env>
+#   just test-affected
+#   just test-affected origin/master 3.11
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+tooling_python := `cat .monorepo/tooling-python`
+# Default Python version for local recipe invocations (test, lint, sync, etc.).
+# Should match a CPython entry in [tool.monorepo.test].python-versions in pyproject.toml.
+default_python := "3.10"
+
+
+# Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
+# Pure-Python packages only — native (Rust) packages are released via the
+# release-native.yml GitHub Actions workflow.
+# Specify individual package names or 'all'.
+# Pass '--index testpypi' to publish to TestPyPI instead.
+# Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
+# Example: just release all
+# Example: just release dissect.util dissect.cstruct
+# Example: just release all --index testpypi
+release +args:
+    .monorepo/release_pure.sh {{args}}
+
+# Remove all built wheels and sdists from the dist/ directory.
+clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -L dist ]] && { echo "error: dist is a symlink, refusing to remove" >&2; exit 1; }
+    rm -rf "$PWD/dist"
+
+# List workspace packages whose current version has no release tag (i.e. not yet published).
+# Pass --names to get a bare newline-separated list of package names only.
+pending-releases *args:
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py pending-releases {{args}}
+
+# Update the version specifier for an internal dependency across all projects.
+# Only modifies projects that already declare the dependency.
+# Example: just set-constraint dissect.cstruct ">=4.7,<5"
+set-constraint package specifier:
+    uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+
+# Bump the minor version of one or more workspace packages.
+# Specify individual package names, or 'auto' to bump only packages with new
+# commits since their last release tag (pending packages are silently skipped).
+# Refuses to bump any explicitly named package whose current version has no
+# release tag yet — release pending packages first to avoid double-bumps.
+# Refuses to bump any explicitly named package with no new commits since its
+# last release tag — there is nothing to release.
+# Example: just bump dissect.util dissect.cstruct
+# Example: just bump auto
+bump +packages:
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
+    uv lock
+
+# Bump the patch version of one or more workspace packages.
+# 'auto' is not supported — patch bumps always require explicit package names.
+# Subject to the same guards as 'just bump': refuses to bump packages with no
+# release tag (double-bump guard) or no new commits since the last release tag.
+# Example: just bump-patch dissect.util
+# Example: just bump-patch dissect.util dissect.cstruct
+bump-patch +packages:
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump --patch {{packages}}
+    uv lock
+
+# Regenerate the dissect meta-package dependency list from current workspace versions.
+update-meta:
+    uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
+
+# Run ruff check+format over all projects.
+# Pass fix="true" to auto-fix instead of reporting.
+ruff fix="false":
+    uv run --group dev --python "{{tooling_python}}" ruff check {{ if fix == "true" { "--fix" } else { "" } }}
+    uv run --group dev --python "{{tooling_python}}" ruff format {{ if fix == "true" { "" } else { "--check" } }}
+
+# Internal: run vermin minimum-version check over all projects.
+# `typing_extensions` is excluded because vermin reports it as requiring ~2/~3
+# (the module's own declared compatibility range), which is a false positive
+# unrelated to the actual code under analysis.
+# See: https://github.com/netromdk/vermin/issues/330
+vermin:
+    uv run --group dev --python "{{tooling_python}}" vermin -t={{default_python}}- --no-tips --lint --exclude typing_extensions projects
+
+# Check formatting and linting (ruff + vermin).
+lint:
+    just ruff
+    just vermin
+
+# Auto-fix ruff issues (vermin has no auto-fix).
+fix:
+    just ruff true
+
+# Run all tooling scripts tests (unit and integration)
+# Example: just test-tooling -v
+test-tooling *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/ {{flags}}
+
+# Run tooling unit tests
+# Example: just test-tooling-unit -x
+test-tooling-unit *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/unit {{flags}}
+
+# Run tooling integration tests
+# Example: just test-tooling-integration -k "test_bump"
+test-tooling-integration *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/integration {{flags}}
+
+# Run ruff check+format over the monorepo tooling scripts.
+# Pass fix="true" to auto-fix instead of reporting.
+lint-tooling fix="false":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{fix}}" = "true" ]; then
+        uv run --group dev --python "{{tooling_python}}" ruff check --fix .monorepo
+        uv run --group dev --python "{{tooling_python}}" ruff format .monorepo
+    else
+        uv run --group dev --python "{{tooling_python}}" ruff check .monorepo
+        uv run --group dev --python "{{tooling_python}}" ruff format --check .monorepo
+    fi
+
+# Build the Sphinx API-reference docs for every project that has a tests/_docs/
+# directory and fail if sphinx-build emits any warnings.
+# All workspace packages are installed as editable so autoapi can resolve imports
+# across sibling projects.
+# Example: just docs-check
+docs-check:
+    uv run --group docs --all-packages --all-extras --python "{{tooling_python}}" bash .monorepo/docs-check.sh
+
+# Remove all Sphinx build artefacts (cached environment + autoapi-generated RST
+# files) so that the next docs-check starts from a clean state.
+# Run this after changing conf.py or autoapi_options to avoid stale output.
+# Example: just docs-clean
+docs-clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in projects/*/tests/_docs; do
+        [[ -d "$d" ]] || continue
+        rm -rf "$d/build" "$d/api"
+    done
+
+# Sync the workspace virtual environment.
+# Creates (or updates) the default venv, installs all workspace packages as
+# editable with all extras and the dev dependency group.
+# Example: just sync
+# Example: just sync 3.12
+sync env=default_python:
+    uv sync --group dev --all-packages --all-extras --python {{env}}
+
+# Run pytest for a single project using `uv` to create the environment.
+# --all-packages installs all workspace members as editable so sibling deps are importable.
+# --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
+# -n auto (pytest-xdist): distributes tests across one worker process per CPU core.
+#   Tests run concurrently; order is non-deterministic; each worker is a fresh subprocess.
+# Example: just test dissect.xfs 3.11
+# Example: just test dissect.xfs 3.11 "-k test_foo"
+test project env=default_python args="":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    uv run --group dev --all-packages --all-extras --python {{env}} \
+        pytest -n auto projects/{{project}} {{args}} \
+        || exit_code=$?
+    # Exit code 5 means no tests were collected — not a failure.
+    [ "${exit_code:-0}" -eq 5 ] || exit "${exit_code:-0}"
+
+# Run pytest for every project using the given Python version.
+# Skips directories that don't have a pyproject.toml.
+# Pass extra pytest args via 'args', e.g.: just test-all 3.10 "-k test_foo"
+test-all env=default_python args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in projects/*; do
+        if [ -f "$d/pyproject.toml" ]; then
+            project_name=$(basename "$d")
+            echo "--- Running tests for $project_name with Python {{env}} ---"
+            just test "$project_name" {{env}} {{args}}
+        fi
+    done
+
+# Run pytest for every project across all configured Python environments.
+# Reads python-versions from [tool.monorepo.test] in pyproject.toml.
+test-all-envs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t envs < <(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format versions)
+    for env in "${envs[@]}"; do
+        echo "=== Testing with Python $env ==="
+        just test-all "$env"
+    done
+
+# Run tests only for packages affected by changes vs a base ref.
+# Example: just test-affected origin/master 3.11
+test-affected ref="origin/master" env=default_python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
+    if [ -z "$packages" ]; then
+        echo "No packages affected. Nothing to do."
+        exit 0
+    fi
+    echo "Affected packages: $packages"
+    for pkg in $packages; do
+        just test "$pkg" {{env}}
+    done
+
+# Compile the Rust extension in-place for a single native project.
+# The .so lands in src/..., directly visible to the uv editable install.
+# Pass env to pin the Python version so the .so ABI matches the test run.
+# Requires: cargo/rustup installed locally.
+# Example: just build-native-inplace dissect.util 3.12
+build-native-inplace project env=default_python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd projects/{{project}}
+    uv run --python {{env}} --with setuptools-rust python -c "from setuptools import setup; setup()" build_ext --inplace
+
+# Compile the Rust extensions in-place for all native projects.
+# Example: just build-all-native-inplace 3.12
+build-all-native-inplace env=default_python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t native_projects < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
+    if [[ ${#native_projects[@]} -eq 0 ]]; then
+        echo "No native projects found."
+        exit 0
+    fi
+    for pkg in "${native_projects[@]}"; do
+        echo "--- Building native extension for $pkg with Python {{env}} ---"
+        just build-native-inplace "$pkg" {{env}}
+    done
+
+# Compile the Rust extension in-place and run pytest with DISSECT_FORCE_NATIVE set.
+# Fails (not skips) if the compiled extension cannot be imported.
+# Example: just test-native dissect.util 3.12
+# Example: just test-native dissect.util 3.12 "-k test_lz4"
+test-native project env=default_python args="":
+    just build-native-inplace {{project}} {{env}}
+    DISSECT_FORCE_NATIVE=1 just test {{project}} {{env}} {{args}}
+
+# Build all native extensions in-place, then run the full test suite across every project.
+# DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
+# Example: just test-native-all 3.10
+test-native-all env=default_python:
+    just build-all-native-inplace {{env}}
+    DISSECT_FORCE_NATIVE=1 just test-all {{env}}
+
+# Build all native extensions in-place, then run tests for affected packages only.
+# All extensions are always built (not just affected ones) so that non-affected native
+# packages are available as compiled dependencies for the packages under test.
+# Trade-off: O(all native) builds vs. O(affected native) — acceptable while the number
+# of native projects stays small and each has a pure-Python fallback.
+# DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
+# Example: just test-native-affected origin/master 3.10
+test-native-affected ref="origin/master" env=default_python:
+    just build-all-native-inplace {{env}}
+    DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
+
+# Build native wheels (abi3 + free-threaded) for a single package via cibuildwheel.
+# Runs abi3audit on the produced abi3 wheels to verify stable-ABI compliance.
+# Python versions are taken from [tool.monorepo.test] python-versions.
+# archs: value for CIBW_ARCHS — "auto" means host arch only; space-separated list enables
+#        additional targets (caller must configure QEMU first for non-native arches).
+# Requires Docker for Linux builds.
+# Example: just build-native-wheels dissect.util
+# Example: just build-native-wheels dissect.util "x86_64 i686 aarch64"
+build-native-wheels pkg archs="auto":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="dist/{{pkg}}"
+    mkdir -p "$out"
+    # CIBW_BUILD lists abi3 CPython + PyPy identifiers derived from python_versions.py.
+    # Free-threaded targets (cp3??t-*) are handled separately in pass 2.
+    cibw_build=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format cibw-build)
+    min_abi=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format min-cpython-abi)
+    echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
+    # Pass 1: abi3 CPython + PyPy — py-limited-api floor derived from python-versions.
+    CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
+        CIBW_CONFIG_SETTINGS="--build-rust --build-option=--py-limited-api=$min_abi" \
+        uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
+            --config-file pyproject.toml \
+            --output-dir "$out" \
+            "projects/{{pkg}}"
+    # Pass 2: free-threaded builds cannot use Py_LIMITED_API.
+    CIBW_BUILD="cp3??t-*" CIBW_ARCHS="{{archs}}" \
+        CIBW_CONFIG_SETTINGS="--build-rust" \
+        uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
+            --config-file pyproject.toml \
+            --output-dir "$out" \
+            "projects/{{pkg}}"
+    # --- abi3audit (verify stable-ABI compliance of abi3 wheels) ---
+    mapfile -t abi3_wheels < <(ls "$out"/*-abi3-*.whl 2>/dev/null || true)
+    if [[ ${#abi3_wheels[@]} -gt 0 ]]; then
+        echo "--- Running abi3audit for {{pkg}} ---"
+        uv tool run abi3audit --strict --report "${abi3_wheels[@]}"
+    fi
+
+# Build native wheels for all native projects, or a caller-specified subset.
+# archs: "auto" for host arch only (suitable for PRs); space-separated list for
+#        multi-arch builds (caller must configure QEMU first for non-native arches).
+# packages: space-separated package names, or 'all' to build every native package.
+# Example: just test-native-wheels                               # host arch only, all native packages
+# Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
+# Example: just test-native-wheels auto "dissect.util dissect.fve" # specific packages only
+test-native-wheels archs="auto" packages="all":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "{{packages}}" == "all" ]]; then
+        mapfile -t to_build < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
+    else
+        read -ra to_build <<< "{{packages}}"
+    fi
+    for pkg in "${to_build[@]}"; do
+        just build-native-wheels "$pkg" "{{archs}}"
+    done

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=77.0.0", "setuptools_scm[toml]>=6.4.0"]
-backend-path = ["dissect/fve"]
+requires = ["setuptools>=77.0.0"]
+backend-path = ["src/dissect/fve"]
 build-backend = "_build"
 
 [project]
@@ -30,7 +30,7 @@ dependencies = [
     "dissect.util>=3.22,<4",
     "pycryptodome",
 ]
-dynamic = ["version"]
+version = "4.6"
 
 [project.urls]
 homepage = "https://dissect.tools"
@@ -42,114 +42,49 @@ full = [
     "dissect.target",
     "rich",
 ]
-dev = [
-    "dissect.cstruct>=4.0.dev,<5.0.dev",
-    "dissect.util>=3.22.dev,<4.0.dev",
-]
-
-[dependency-groups]
-test = [
-    "pytest",
-]
-lint = [
-    "ruff==0.13.1",
-    "vermin",
-]
-build = [
-    "build",
-]
-debug = [
-    "ipdb",
-]
-dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "debug"},
-]
+argon2 = ["argon2-cffi"]
 
 [project.scripts]
 fve-dd = "dissect.fve.tools.dd:main"
 
+[tool.setuptools.packages.find]
+include = ["dissect.*"]
+where = ["src"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["_native.src/*"]
+
+[[tool.setuptools-rust.ext-modules]]
+target = "dissect.fve._native"
+path = "src/dissect/fve/_native.src/Cargo.toml"
+features = ["pyo3/extension-module"]
+strip = "All"
+
+[tool.uv.sources."dissect.cstruct"]
+workspace = true
+
+[tool.uv.sources."dissect.target"]
+workspace = true
+
+[tool.uv.sources."dissect.util"]
+workspace = true
+
+
 [tool.ruff]
-line-length = 120
-required-version = ">=0.13.1"
-
-[tool.ruff.format]
-docstring-code-format = true
-
-[tool.ruff.lint]
-select = [
-  "F",
-  "E",
-  "W",
-  "I",
-  "UP",
-  "YTT",
-  "ANN",
-  "B",
-  "C4",
-  "DTZ",
-  "T10",
-  "FA",
-  "ISC",
-  "G",
-  "INP",
-  "PIE",
-  "PYI",
-  "PT",
-  "Q",
-  "RSE",
-  "RET",
-  "SLOT",
-  "SIM",
-  "TID",
-  "TC",
-  "PTH",
-  "PLC",
-  "TRY",
-  "FLY",
-  "PERF",
-  "FURB",
-  "RUF",
-  "D"
-]
-ignore = [
-    "E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003", "PLC0415",
-    # Ignore some pydocstyle rules for now as they require a larger cleanup
-    "D1",
-    "D205",
-    "D301",
-    "D417",
-    # Seems bugged: https://github.com/astral-sh/ruff/issues/16824
-    "D402",
-]
-future-annotations = true
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.flake8-type-checking]
-strict = true
-
-[tool.ruff.lint.per-file-ignores]
-"tests/_docs/**" = ["INP001"]
-"**.pyi" = ["PYI042"]
+extend = "../../ruff.toml"
 
 [tool.ruff.lint.isort]
 known-first-party = ["dissect.fve"]
 known-third-party = ["dissect"]
 required-imports = ["from __future__ import annotations"]
 
-[tool.setuptools.packages.find]
-include = ["dissect.*"]
 
-[tool.setuptools.exclude-package-data]
-"*" = ["_native.src/*"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
-[tool.setuptools_scm]
-
-[[tool.setuptools-rust.ext-modules]]
-target = "dissect.fve._native"
-path = "dissect/fve/_native.src/Cargo.toml"
-features = ["pyo3/extension-module"]
-strip = "All"
+[tool.monorepo]
+native = true
+[dependency-groups]
+dev = [
+    "pytest",
+]

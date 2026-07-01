@@ -1,0 +1,256 @@
+
+# dissect.archive
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#11)
+0b834143abf85edce5af577e4a601da550777863
+# Add stricter Ruff linting (#25)
+24c09c7916af486d94f506ac154fcbd9406363ad
+
+# dissect.btrfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#20)
+d7545b1920a495ae5d8ac833c0b58a953c3f57ec
+# Add stricter Ruff linting (#33)
+78c1bf7636e865a09991d40c1e4f7fda38427122
+
+# dissect.cim
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#27)
+696cf7f9d6d8e06f148000da778983a1154f3cc2
+# Add stricter Ruff linting (#37)
+db9984514dd7a6446da72a014fd8e44dd9b6ca23
+
+# dissect.clfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#29)
+44ab18dd1899fc054b5539470979361709d7742f
+# Add stricter Ruff linting (#34)
+b809df484ed425f8a9b511a5fdeab4fc2783969d
+
+# dissect.cramfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Add stricter Ruff linting (#4)
+d51787670989418b200e0ed4b4286afe3bd4d115
+
+# dissect.cstruct
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#106)
+f221e3eabf3d2e557433ad37daf1966611f2d8da
+# Add stricter Ruff linting (#151)
+d94a7634cabd32e5c3fcd907f6424130b7767535
+
+# dissect.database
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Add stricter Ruff linting (#49)
+dd4b853f144a8f74b7cfdda915b2ed161c654b8d
+
+# dissect.etl
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#33)
+bec449e107ec78cb596611a48ba75a9aa593df4e
+# Add stricter Ruff linting (#42)
+93a91d66aadfed24e72062bf031dc319a41ee8f1
+
+# dissect.eventlog
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#32)
+3231a336573c14693524bae92cc8d8679226c729
+
+
+# dissect.evidence
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#35)
+b439f89354c33c847b87abe3907ffedccb211715
+# Add stricter Ruff linting (#51)
+f97434d5c0a0aad0ff06d61ae95f0b6407caa602
+
+# dissect.executable
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#26)
+b1faac3ac7af3565716e075267bb0db7fca2c5e8
+# Add stricter Ruff linting (#35)
+ba84bea1e2cb95ac902afd503f9318bade806e2a
+
+# dissect.extfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#35)
+ac907ce44da5a8a5f899cc01e4a6d3bf224f93d5
+
+# dissect.fat
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#33)
+8606377f3dec177fd3dd8ecd0adc429295972494
+# Add stricter Ruff linting (#41)
+39afee082f2c41e169234fdf282de42c310d9f80
+
+# dissect.ffs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#33)
+cf5ddf4bbff614b7610dea19aa849c7c971f2d9f
+
+# dissect.fve
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#4)
+c1c67349d33151cab19d45c5f69bf09d269a4d06
+
+# dissect.hypervisor
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#49)
+3953cd30c07af183f774ed9f7230f1b09ebf0b1b
+# Add stricter Ruff linting (#79)
+33cfc49279bb67e8b7ad7dbcdbf064d1e1fd95ce
+
+# dissect.jffs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#11)
+a878a645498cd3cef27965ad33032ca0105253ff
+
+# dissect.ntfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#39)
+8bf3dc18df3c1fecabae1cbdcb8d8d4020ebd498
+# Add stricter Ruff linting (#53)
+b8f770cca44450d15e891a26fcf649abb6d7a7c4
+
+# dissect.ole
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#25)
+8d06f2093a133a2fd1f8b2d742c7349bd80d0ac5
+
+# dissect.regf
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#30)
+22d9e6d59feb906a4d8e6e750d185eb72f089ca4
+
+# dissect.shellitem
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#36)
+f7bbf9c252abf444c7a6892da3ed0653acd93f53
+
+# dissect.squashfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#30)
+6d0ba0af9bd6b6cbd604a34eff3b6a649399d90d
+
+# dissect.target
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#1097)
+ade1bb804e67487c255404ef99b796aedc317e96
+# Add stricter Ruff linting (#1591)
+ad07033152c5b5bfc5534ddd099daa46d959da60
+
+# dissect.thumbcache
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#21)
+4e73491e34e71d1ff9975c30473ed1e1e592a7bf
+# Add stricter Ruff linting (#26)
+faf450d5482cbff059307bb91496a28f34f31363
+
+# dissect.util
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+
+# Change linter to Ruff (#52)
+5993a69e461e1597d64513b31f59e28a4df789a0
+# Add stricter Ruff linting (#123)
+0ae6583cad60a907921fc9070b79d75ebbc6f23d
+
+# dissect.vmfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#35)
+983c9536c47c1a077dec9a9684d0b0ac1a101234
+
+# dissect.volume
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#44)
+d2393edacb71976b254c3a22d8e0e096383ca5b2
+# Add stricter Ruff linting (#63)
+5e5bc1789df9335a7ae08302dca9a2a90c64d4c7
+
+# dissect.xfs
+# Formatting commits. You can ignore them during git-blame with `--ignore-rev` or `--ignore-revs-file`.
+#
+#   $ git config --add 'blame.ignoreRevsFile' '.git-blame-ignore-revs'
+#
+# Change linter to Ruff (#40)
+628c17d97b2355784f0a475918cc3a1634049aa0
