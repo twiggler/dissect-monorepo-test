@@ -1,0 +1,1234 @@
+from __future__ import annotations
+
+import base64
+import io
+import json
+import warnings
+from collections import ChainMap
+from collections.abc import MutableMapping
+from contextlib import contextmanager
+from enum import Enum
+from functools import lru_cache
+from itertools import chain, repeat
+from operator import attrgetter
+from textwrap import dedent
+from types import FunctionType
+from typing import TYPE_CHECKING, Any, BinaryIO
+
+from dissect.cstruct.bitbuffer import BitBuffer
+from dissect.cstruct.exception import DefinitionError
+from dissect.cstruct.expression import Expression
+from dissect.cstruct.lexer import IDENTIFIER_TYPES
+from dissect.cstruct.types.base import (
+    _BUFFER_TYPES,
+    _IMMUTABLE_TYPES,
+    BaseArray,
+    BaseType,
+    MetaType,
+    _is_buffer_type,
+)
+from dissect.cstruct.types.char import Char
+from dissect.cstruct.types.enum import EnumMetaType
+from dissect.cstruct.types.int import Int
+from dissect.cstruct.types.packed import Packed
+from dissect.cstruct.types.pointer import Pointer
+from dissect.cstruct.types.void import Void
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Mapping
+    from types import FunctionType
+
+    from typing_extensions import Self
+
+    from dissect.cstruct.cstruct import Endianness
+
+
+class Field:
+    """Structure field."""
+
+    def __init__(self, name: str | None, type_: type[BaseType], bits: int | None = None, offset: int | None = None):
+        self.name = name  # The name of the field, or None if anonymous
+        self._name = name or type_.__name__  # The name of the field, or the type name if anonymous
+        self.type = type_
+        self.bits = bits
+        self.offset = offset
+        self.alignment = type_.__alignment__ or 1
+
+    def __repr__(self) -> str:
+        bits_str = f" : {self.bits}" if self.bits else ""
+        return f"<Field {self.name} {self.type.__name__}{bits_str}>"
+
+
+class StructureMetaType(MetaType):
+    """Base metaclass for cstruct structure type classes."""
+
+    __members__: dict[str, Field]
+    """Mapping of field names to :class:`Field` objects, including "folded" fields from anonymous structures."""
+    __lookup__: dict[str, Field]
+    """Mapping of "raw" field names to :class:`Field` objects. E.g. holds the anonymous struct and not its fields."""
+    __fields__: list[Field]
+    """List of :class:`Field` objects for this structure. This is the structures' Single Source Of Truth."""
+
+    # Internal
+    __align__: bool
+    __anonymous__: bool
+    __updating__ = False
+    __compiled__ = False
+    __static_sizes__: dict[str, int]  # Cache of static sizes by field name
+
+    def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any], **kwargs) -> Self:  # type: ignore
+        if (fields := classdict.pop("__members__", None)) is not None:
+            metacls._update_fields(metacls, fields, align=classdict.get("__align__", False), classdict=classdict)
+        elif "__init__" in classdict or "__new__" in classdict:
+            # Read with type.__call__, so that the __init__ or __new__ of the subclass is called
+            classdict["__construct__"] = None
+
+        return super().__new__(metacls, name, bases, classdict, **kwargs)
+
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
+        if len(args) == 1 and not kwargs:
+            # Fast paths for the most common cases
+            obj = args[0]
+            if type(obj) in _BUFFER_TYPES:
+                return cls._read(io.BytesIO(obj), endian=cls.__cs__.endian)
+
+            if hasattr(obj, "read") and not isinstance(obj, cls):
+                return cls._read(obj, endian=cls.__cs__.endian)
+
+        if not args and not kwargs:
+            obj = type.__call__(cls)
+            object.__setattr__(obj, "__dynamic_sizes__", {})
+            return obj
+
+        return super().__call__(*args, **kwargs)
+
+    def _normalize(cls, value: Any) -> Any:
+        if isinstance(value, (Structure, UnionProxy)):
+            # E.g. a structure of another type with the same fields
+            return value
+        return super()._normalize(value)
+
+    def _update_fields(
+        cls, fields: list[Field], align: bool = False, classdict: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        classdict = classdict or {}
+
+        lookup = {}
+        raw_lookup = {}
+        field_names = []
+        static_sizes = {}
+        for field in fields:
+            if field._name in lookup and field._name != "_":
+                raise DefinitionError(f"Duplicate field name: {field._name}")
+
+            if not field.type.__dynamic__:
+                static_sizes[field._name] = field.type.__size__
+
+            if isinstance(field.type, StructureMetaType) and field.name is None:
+                for anon_field in field.type.__members__.values():
+                    attr = f"{field._name}.{anon_field.name}"
+                    classdict[anon_field.name] = property(attrgetter(attr), attrsetter(attr))
+
+                lookup.update(field.type.__members__)
+            else:
+                lookup[field._name] = field
+
+            raw_lookup[field._name] = field
+
+        field_names = lookup.keys()
+        classdict["__members__"] = lookup
+        classdict["__lookup__"] = raw_lookup
+        classdict["__fields__"] = fields
+        classdict["__static_sizes__"] = static_sizes
+        classdict["__bool__"] = _generate__bool__(field_names)
+
+        if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
+            classdict["__init__"] = _generate_union__init__(raw_lookup.values())
+            # Not a great way to do this but it works for now
+            classdict["__eq__"] = Union.__eq__
+        else:
+            classdict["__init__"] = _generate_structure__init__(raw_lookup.values())
+            classdict["__construct__"] = _generate_structure__construct__(raw_lookup.keys())
+            classdict["__eq__"] = _generate__eq__(field_names)
+
+        classdict["__hash__"] = _generate__hash__(field_names)
+
+        # If we're calling this as a class method or a function on the metaclass
+        if issubclass(cls, type):
+            size, alignment = cls._calculate_size_and_offsets(cls, fields, align)
+        else:
+            size, alignment = cls._calculate_size_and_offsets(fields, align)
+
+        # TODO: generate cached_property for lazy reading
+
+        classdict["__size__"] = size
+        classdict["__alignment__"] = alignment
+        classdict["__dynamic__"] = size is None
+
+        return classdict
+
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
+        """Iterate all fields in this structure to calculate the field offsets and total structure size.
+
+        If a structure has a dynamic field, further field offsets will be set to None and ``self.__dynamic__``
+        will be set to ``True``.
+        """
+        # The current offset, set to None if we become dynamic
+        offset = 0
+        # The current alignment for this structure
+        alignment = 0
+
+        # The current bit field type
+        bits_type = None
+        # The offset of the current bit field, set to None if we become dynamic
+        bits_field_offset = 0
+        # How many bits we have left in the current bit field
+        bits_remaining = 0
+
+        for field in fields:
+            if field.offset is not None:
+                # If a field already has an offset, it's leading
+                offset = field.offset
+
+            if align and offset is not None:
+                # Round to next alignment
+                offset += -offset & (field.alignment - 1)
+
+            # The alignment of this struct is equal to its largest members' alignment
+            alignment = max(alignment, field.alignment)
+
+            if field.bits:
+                field_type = field.type
+
+                if isinstance(field_type, EnumMetaType):
+                    field_type = field_type.__type__
+
+                if not issubclass(field_type, (Int, Char)) and not (
+                    issubclass(field_type, Packed) and issubclass(field_type, int)
+                ):
+                    raise DefinitionError(f"Bit fields of type {field.type.__name__} are unsupported")
+
+                # Bit fields have special logic
+                if (
+                    # Exhausted a bit field
+                    bits_remaining == 0
+                    # Moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
+                    or field_type != bits_type
+                    # Still processing a bit field, but it's at a different offset due to alignment or a manual offset
+                    or (None not in (offset, bits_field_offset) and offset > bits_field_offset + bits_type.__size__)
+                ):
+                    # ... if any of this is true, we have to move to the next field
+                    bits_type = field_type
+                    bits_count = bits_type.__size__ * 8
+                    bits_remaining = bits_count
+                    bits_field_offset = offset
+
+                    if offset is not None:
+                        # We're not dynamic, update the structure size and current offset
+                        offset += bits_type.__size__
+
+                    field.offset = bits_field_offset
+
+                bits_remaining -= field.bits
+
+                if bits_remaining < 0:
+                    raise DefinitionError("Straddled bit fields are unsupported")
+            else:
+                # Reset bits stuff
+                bits_type = None
+                bits_field_offset = bits_remaining = 0
+
+                field.offset = offset
+
+                if offset is not None:
+                    # We're not dynamic, update the structure size and current offset
+                    try:
+                        field_len = len(field.type)
+                    except TypeError:
+                        # This field is dynamic
+                        offset = None
+                        continue
+
+                    offset += field_len
+
+        if align and offset is not None:
+            # Add "tail padding" if we need to align
+            # This bit magic rounds up to the next alignment boundary
+            # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
+            offset += -offset & (alignment - 1)
+
+        # The structure size is whatever the currently calculated offset is
+        return offset, alignment
+
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
+        bit_buffer = None
+        struct_start = stream.tell()
+
+        result = {}
+        sizes = {}
+        for field in cls.__fields__:
+            offset = stream.tell()
+
+            if field.offset is not None and offset != struct_start + field.offset:
+                # Field is at a specific offset, either aligned or added that way
+                offset = struct_start + field.offset
+                stream.seek(offset)
+
+            if cls.__align__ and field.offset is None:
+                # Previous field was dynamically sized and we need to align
+                offset += -offset & (field.alignment - 1)
+                stream.seek(offset)
+
+            if field.bits:
+                if bit_buffer is None:
+                    bit_buffer = BitBuffer(stream, endian=endian)
+
+                if isinstance(field.type, EnumMetaType):
+                    value = field.type(bit_buffer.read(field.type.__type__, field.bits))
+                else:
+                    value = bit_buffer.read(field.type, field.bits)
+
+                result[field._name] = value
+                continue
+
+            if bit_buffer is not None:
+                bit_buffer.reset()
+
+            value = field.type._read(stream, context=result, endian=endian)
+
+            result[field._name] = value
+            if field.type.__dynamic__:
+                sizes[field._name] = stream.tell() - offset
+
+        if cls.__align__:
+            # Align the stream
+            stream.seek(-stream.tell() & (cls.__alignment__ - 1), io.SEEK_CUR)
+
+        if (construct := cls.__construct__) is not None:
+            # This bypasses the __init__ method
+            obj = construct(cls, *result.values())
+        else:
+            # Using type.__call__ directly calls the __init__ method of the class
+            # This is faster than calling cls() and bypasses the metaclass __call__ method
+            obj = type.__call__(cls, **result)
+        obj.__dynamic_sizes__ = sizes
+        return obj
+
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:  # type: ignore
+        result = []
+
+        while obj := cls._read(stream, context=context, endian=endian):
+            result.append(obj)
+
+        return result
+
+    def _write(cls, stream: BinaryIO, data: Structure, *, endian: Endianness) -> int:
+        bit_buffer = None
+        struct_start = stream.tell()
+
+        for field in cls.__fields__:
+            field_type = field.type
+
+            if bit_buffer is not None and bit_buffer._type is not None:
+                bit_field_type = (
+                    (field_type.__type__ if isinstance(field_type, EnumMetaType) else field_type)
+                    if field.bits
+                    else None
+                )
+                # Current field is not a bit field, but previous was
+                # Or, moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
+                if bit_buffer._type != bit_field_type:
+                    # Flush the current bit buffer so we can process alignment properly
+                    bit_buffer.flush()
+
+            offset = stream.tell()
+
+            if field.offset is not None and offset < struct_start + field.offset:
+                # Field is at a specific offset, either aligned or added that way
+                stream.write(b"\x00" * (struct_start + field.offset - offset))
+                offset = struct_start + field.offset
+
+            if cls.__align__ and field.offset is None:
+                bit_type = bit_buffer._type if bit_buffer is not None else None
+                if bit_type is None or bit_buffer._remaining == 0 or bit_type != field_type:
+                    # Previous field was dynamically sized and we need to align
+                    align_pad = -offset & (field.alignment - 1)
+                    stream.write(b"\x00" * align_pad)
+                    offset += align_pad
+
+            value = getattr(data, field._name)
+            if value is None:
+                value = field_type.__default__()
+
+            if field.bits:
+                if bit_buffer is None:
+                    bit_buffer = BitBuffer(stream, endian=endian)
+
+                if isinstance(field_type, EnumMetaType):
+                    # Enum members and plain integers are shifted into the buffer the same way
+                    bit_buffer.write(field_type.__type__, value, field.bits)
+                else:
+                    bit_buffer.write(field_type, value, field.bits)
+            else:
+                field_type._write(stream, value, endian=endian)
+
+        if bit_buffer is not None and bit_buffer._type is not None:
+            bit_buffer.flush()
+
+        if cls.__align__:
+            # Align the stream
+            stream.write(b"\x00" * (-stream.tell() & (cls.__alignment__ - 1)))
+
+        return stream.tell() - struct_start
+
+    def add_field(cls, name: str, type_: type[BaseType], bits: int | None = None, offset: int | None = None) -> None:
+        field = Field(name, type_, bits=bits, offset=offset)
+        cls.__fields__.append(field)
+
+        if not cls.__updating__:
+            cls.commit()
+
+    @contextmanager
+    def start_update(cls) -> Iterator[None]:
+        try:
+            cls.__updating__ = True
+            yield
+        finally:
+            cls.commit()
+            cls.__updating__ = False
+
+    def commit(cls) -> None:
+        classdict = cls._update_fields(cls.__fields__, cls.__align__)
+
+        for key, value in classdict.items():
+            setattr(cls, key, value)
+
+        if cls.__compiled__:
+            # If the previous class was compiled try to compile this too
+            from dissect.cstruct import compiler
+
+            compiler.compile_structure(cls)
+
+    def cdef(cls, *, recursive: bool = False) -> str:
+        """Render this structure (or union) back to its C-style definition.
+
+        When ``recursive=True``, any ``#define`` constants referenced in array sizes are emitted as well, so that the
+        result can be parsed on its own. Note that the result is semantically equivalent to the original definition,
+        but not necessarily identical.
+
+        Args:
+            recursive: Also emit the definitions of any types referenced by this structure.
+
+        Returns:
+            The C-style definition as a string.
+        """
+
+        def _decompose(type_: MetaType) -> tuple[MetaType, int, list[int | Expression | None]]:
+            dimensions = []
+            while issubclass(type_, BaseArray):
+                dimensions.append(type_.__num_entries__)
+                type_ = type_.__type__
+
+            stars = 0
+            while issubclass(type_, Pointer):
+                stars += 1
+                type_ = type_.__type__
+
+            return type_, stars, dimensions
+
+        def _deps(type_: StructureMetaType, seen: set[MetaType]) -> list[MetaType | str]:
+            deps = []
+            for field in type_.__fields__:
+                base, _, dimensions = _decompose(field.type)
+
+                for dim in dimensions:
+                    if isinstance(dim, Expression):
+                        for token in dim._tokens:
+                            if (
+                                token.type in IDENTIFIER_TYPES
+                                and token.value in cls.__cs__.consts
+                                and token.value not in seen
+                            ):
+                                deps.append(token.value)
+                                seen.add(token.value)
+
+                if isinstance(base, StructureMetaType) and base not in seen:
+                    if base.__anonymous__:
+                        # Anonymous structures are not emitted, but their dependencies are
+                        deps.extend(_deps(base, seen))
+                    else:
+                        seen.add(base)
+                        deps.extend(_deps(base, seen))
+                        deps.append(base)
+
+                elif isinstance(base, EnumMetaType) and base not in seen:
+                    seen.add(base)
+                    deps.append(base)
+
+            return deps
+
+        def _render_struct(type_: StructureMetaType, name: str) -> list[str]:
+            keyword = "union" if isinstance(type_, UnionMetaType) else "struct"
+            title = f"{keyword} {name}" if name else keyword
+
+            lines = [f"{title} {{"]
+            for field in type_.__fields__:
+                base, stars, dimensions = _decompose(field.type)
+
+                declarator = "*" * stars + (field.name or "") + "".join(f"[{dim or ''}]" for dim in dimensions)
+                if field.bits is not None:
+                    declarator = f"{declarator} : {field.bits}" if declarator else f": {field.bits}"
+
+                if isinstance(base, StructureMetaType) and base.__anonymous__:
+                    # Anonymous struct/union: inline the full definition
+                    lines.extend(f"    {line}" for line in _render_struct(base, ""))
+                    lines[-1] = f"{lines[-1]} {declarator};" if declarator else f"{lines[-1]};"
+                else:
+                    prefix = f"{base.__name__} " if declarator else base.__name__
+                    lines.append(f"    {prefix}{declarator};")
+
+            lines.append("}")
+            return lines
+
+        deps = _deps(cls, {cls}) if recursive else []
+        deps.append(cls)
+
+        consts = []
+        blocks = []
+        for type_ in deps:
+            if isinstance(type_, str):
+                consts.append(f"#define {type_} {cls.__cs__.consts[type_]!r}")
+            elif isinstance(type_, EnumMetaType):
+                blocks.append(type_.cdef())
+            else:
+                blocks.append("\n".join(_render_struct(type_, type_.__name__)) + ";")
+
+        return ("\n".join(consts) + "\n\n" if consts else "") + ("\n\n".join(blocks) if blocks else "")
+
+    @property
+    def fields(cls) -> dict[str, Field]:
+        """List of :class:`Field` objects for this structure."""
+        warnings.warn(
+            "The 'fields' property is deprecated, use '__members__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__members__
+
+    @property
+    def lookup(cls) -> dict[str, Field]:
+        """Mapping of "raw" field names to :class:`Field` objects."""
+        warnings.warn(
+            "The 'lookup' property is deprecated, use '__lookup__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__lookup__
+
+
+class Structure(BaseType, metaclass=StructureMetaType):
+    """Base class for cstruct structure type classes.
+
+    Note that setting attributes which do not correspond to a field in the structure results in undefined behavior.
+    For performance reasons, the structure does not check if the field exists when writing to an attribute. It also
+    does not convert the value to the type of the field, unlike the values that are given on initialization.
+    """
+
+    __dynamic_sizes__: dict[str, int]
+
+    __construct__: Callable[..., Self] | None = None
+    """Creates an instance from the values of all fields, without calling ``__init__``."""
+
+    def __len__(self) -> int:
+        if self.__class__.__size__ is not None:
+            return self.__class__.__size__
+        return MetaType.write(self.__class__, io.BytesIO(), self)
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+    def __repr__(self) -> str:
+        values = []
+        for name, field in self.__class__.__members__.items():
+            value = self[name]
+            if issubclass(field.type, int) and not issubclass(field.type, (Pointer, Enum)):
+                value = hex(value)
+            else:
+                value = repr(value)
+            values.append(f"{name}={value}")
+
+        return f"<{self.__class__.__name__} {' '.join(values)}>"
+
+    @property
+    def __values__(self) -> MutableMapping[str, Any]:
+        return StructureValuesProxy(self)
+
+    @property
+    def __sizes__(self) -> Mapping[str, int | None]:
+        # Structures created from values instead of parsed have no dynamic sizes
+        return ChainMap(self.__class__.__static_sizes__, getattr(self, "__dynamic_sizes__", {}))
+
+
+class StructureValuesProxy(MutableMapping):
+    """A proxy for the values of fields of a Structure."""
+
+    def __init__(self, struct: Structure):
+        self._struct: Structure = struct
+
+    def __getitem__(self, key: str) -> Any:
+        if key in self:
+            return getattr(self._struct, key)
+        raise KeyError(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key in self:
+            return setattr(self._struct, key, value)
+        raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._struct.__class__.__members__
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._struct.__class__.__members__)
+
+    def __len__(self) -> int:
+        return len(self._struct.__class__.__members__)
+
+    def __repr__(self) -> str:
+        return repr(dict(self))
+
+    def __delitem__(self, _: str):
+        # Is abstract in base, but deleting is not supported.
+        raise NotImplementedError("Cannot delete fields from a Structure")
+
+
+class UnionMetaType(StructureMetaType):
+    """Base metaclass for cstruct union type classes."""
+
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
+        obj: Union = super().__call__(*args, **kwargs)
+
+        if not hasattr(obj, "_buf"):
+            # If we don't have a _buf attribute, we haven't read from a stream and are initializing with values
+            # Set default internal attributes
+            object.__setattr__(obj, "_buf", None)
+            object.__setattr__(obj, "_endian", cls.__cs__.endian)
+
+        # Calling with non-stream args or kwargs means we are initializing with values
+        if (args and not (len(args) == 1 and (hasattr(args[0], "read") or _is_buffer_type(args[0])))) or kwargs:
+            # We don't support user initialization of dynamic unions yet
+            if cls.__dynamic__:
+                raise NotImplementedError("Initializing a dynamic union is not yet supported")
+
+            # User (partial) initialization, rebuild the union
+            # First user-provided field is the one used to rebuild the union
+            arg_fields = (field._name for _, field in zip(args, cls.__fields__, strict=False))
+            kwarg_fields = (name for name in kwargs if name in cls.__lookup__)
+            if (first_field := next(chain(arg_fields, kwarg_fields), None)) is not None:
+                obj._rebuild(first_field)
+        elif not args and not kwargs:
+            # Initialized with default values
+            # Note that we proxify here in case we have a default initialization (cls())
+            # We don't proxify in case we read from a stream, as we do that later on in _read at a more appropriate time
+            # Same with (partial) user initialization, we do that after rebuilding the union
+            obj._proxify()
+
+        return obj
+
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
+        size = 0
+        alignment = 0
+
+        for field in fields:
+            if size is not None:
+                try:
+                    size = max(len(field.type), size)
+                except TypeError:
+                    size = None
+
+            alignment = max(field.alignment, alignment)
+
+        if align and size is not None:
+            # Add "tail padding" if we need to align
+            # This bit magic rounds up to the next alignment boundary
+            # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
+            size += -size & (alignment - 1)
+
+        return size, alignment
+
+    def _read_fields(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        result = {}
+        sizes = {}
+
+        if cls.__size__ is None:
+            offset = stream.tell()
+            buf = stream
+        else:
+            offset = 0
+            buf = io.BytesIO(stream.read(cls.__size__))
+
+        for field in cls.__fields__:
+            field_type = field.type
+
+            start = 0
+            if field.offset is not None:
+                start = field.offset
+
+            buf.seek(offset + start)
+            value = field_type._read(buf, context=result, endian=endian)
+
+            result[field._name] = value
+            if field.type.__dynamic__:
+                sizes[field._name] = buf.tell() - start
+
+        return result, sizes
+
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
+        if cls.__size__ is None:
+            start = stream.tell()
+            result, sizes = cls._read_fields(stream, context=context, endian=endian)
+            size = stream.tell() - start
+            stream.seek(start)
+            buf = stream.read(size)
+        elif _uses_generated_init(cls):
+            # Fast path for static unions
+            buf = stream.read(cls.__size__)
+            result, sizes = cls._read_fields(io.BytesIO(buf), endian=endian)
+
+            obj: Union = object.__new__(cls)
+            obj.__dict__.update(result)
+            object.__setattr__(obj, "__dynamic_sizes__", sizes)
+            object.__setattr__(obj, "_buf", buf)
+            object.__setattr__(obj, "_endian", endian)
+            obj._proxify()
+            return obj
+        else:
+            result = {}
+            sizes = {}
+            buf = stream.read(cls.__size__)
+
+        # Create the object and set the values
+        # Using type.__call__ directly calls the __init__ method of the class
+        # This is faster than calling cls() and bypasses the metaclass __call__ method
+        # It also makes it easier to differentiate between user-initialization of the class
+        # and initialization from a stream read
+        obj: Union = type.__call__(cls, **result)
+        object.__setattr__(obj, "__dynamic_sizes__", sizes)
+        object.__setattr__(obj, "_buf", buf)
+        object.__setattr__(obj, "_endian", endian)
+
+        if cls.__size__ is not None:
+            obj._update()
+
+        # Proxify any nested structures
+        obj._proxify()
+
+        return obj
+
+    def _write_field(cls) -> Field | None:
+        """Return the field to write a union by, its largest field and preferably not an anonymous structure."""
+        return max(cls.__fields__, key=lambda e: (e.type.__size__ or 0, e.name is not None), default=None)
+
+    def _write(cls, stream: BinaryIO, data: Union, *, endian: Endianness) -> int:
+        if cls.__dynamic__:
+            raise NotImplementedError("Writing dynamic unions is not yet supported")
+
+        offset = stream.tell()
+        expected_offset = offset + len(cls)
+
+        if (field := cls._write_field()) is not None:
+            # Write the value
+            field.type._write(stream, getattr(data, field._name), endian=endian)
+
+        # If we haven't filled the union size yet, pad it
+        if remaining := expected_offset - stream.tell():
+            stream.write(b"\x00" * remaining)
+
+        return stream.tell() - offset
+
+
+class Union(Structure, metaclass=UnionMetaType):
+    """Base class for cstruct union type classes."""
+
+    _buf: bytes
+    _endian: Endianness
+
+    def __eq__(self, other: object) -> bool:
+        return self.__class__ is other.__class__ and bytes(self) == bytes(other)
+
+    def __setattr__(self, attr: str, value: Any) -> None:
+        if self.__class__.__dynamic__:
+            raise NotImplementedError("Modifying a dynamic union is not yet supported")
+
+        super().__setattr__(attr, value)
+        # Fields of an anonymous structure are rebuilt through the proxy of that structure
+        if attr in self.__class__.__lookup__:
+            self._rebuild(attr)
+
+    def _rebuild(self, attr: str) -> None:
+        if (cur_buf := getattr(self, "_buf", None)) is None:
+            cur_buf = b"\x00" * self.__class__.__size__
+
+        buf = io.BytesIO(cur_buf)
+        field = self.__class__.__lookup__[attr]
+        if field.offset:
+            buf.seek(field.offset)
+
+        if (value := getattr(self, attr)) is None:
+            value = field.type.__default__()
+
+        field.type._write(buf, value, endian=self._endian)
+
+        object.__setattr__(self, "_buf", buf.getvalue())
+        self._update()
+
+        # (Re-)proxify all values
+        self._proxify()
+
+    def _update(self) -> None:
+        result, sizes = self.__class__._read_fields(io.BytesIO(self._buf), endian=self._endian)
+        self.__dict__.update(result)
+        object.__setattr__(self, "__dynamic_sizes__", sizes)
+
+    def _proxify(self) -> None:
+        def _proxy_structure(value: Structure, attr: str | None = None) -> None:
+            for field in value.__class__.__fields__:
+                if issubclass(field.type, Structure):
+                    nested_value = getattr(value, field._name)
+                    # Changing a nested field rebuilds the union from the top level field it's in
+                    member = attr or field._name
+                    object.__setattr__(value, field._name, UnionProxy(self, member, nested_value))
+                    # The value of a nested union is already a proxy, so continue with the value behind it
+                    if isinstance(nested_value, UnionProxy):
+                        nested_value = nested_value.__target__
+                    _proxy_structure(nested_value, member)
+
+        _proxy_structure(self)
+
+
+class UnionProxy:
+    __union__: Union
+    __attr__: str
+    __target__: Structure
+
+    def __init__(self, union: Union, attr: str, target: Structure):
+        object.__setattr__(self, "__union__", union)
+        object.__setattr__(self, "__attr__", attr)
+        object.__setattr__(self, "__target__", target)
+
+    def __len__(self) -> int:
+        return len(self.__target__)
+
+    def __bytes__(self) -> bytes:
+        return bytes(self.__target__)
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self.__target__, item)
+
+    def __repr__(self) -> str:
+        return repr(self.__target__)
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self.__target__, attr)
+
+    def __setattr__(self, attr: str, value: Any) -> None:
+        setattr(self.__target__, attr, value)
+        self.__union__._rebuild(self.__attr__)
+
+
+def asdict(obj: Structure | UnionProxy) -> dict[str, Any]:
+    """Return the field values of a structure or union as a dict, like :func:`dataclasses.asdict`.
+
+    The keys are the field names in :attr:`StructureMetaType.__members__`, so the fields of anonymous structures and
+    unions are part of the parent, and a union has all of its fields. Nested structures and unions become dicts and
+    arrays become lists. Other values are returned as they are: enum members stay enum members, and pointers are not
+    dereferenced.
+
+    Note that this is different from :func:`dumpstruct` called with ``output="dict"``: this function returns a
+    dictionary with pairs of field names and values, rather than a dictionary that describes the layout of the
+    structure (hex bytes, offsets, display strings).
+
+    Args:
+        obj: The structure or union to convert.
+
+    Raises:
+        TypeError: If ``obj`` is not a structure or union instance.
+    """
+    while isinstance(obj, UnionProxy):
+        obj = obj.__target__
+
+    if not isinstance(obj, Structure):
+        raise TypeError("asdict() should be called on Structure instances")
+
+    return _asdict_value(obj)
+
+
+def _asdict_value(value: Any) -> Any:
+    # Structures in a union are proxied
+    while isinstance(value, UnionProxy):
+        value = value.__target__
+
+    if isinstance(value, Structure):
+        return {name: _asdict_value(getattr(value, name)) for name in value.__class__.__members__}
+
+    if isinstance(value, (list, tuple)):
+        # The entries of an array of other types are returned as they are, copying them is much faster
+        if isinstance(value, BaseArray) and not issubclass(value.__type__, (Structure, BaseArray)):
+            return list(value)
+        return [_asdict_value(item) for item in value]
+
+    return value
+
+
+class JSONEncoder(json.JSONEncoder):
+    """JSON encoder for structures and unions, and the values of their fields.
+
+    Structures and unions are encoded as objects with the fields of :func:`asdict`. Bytes, such as the values of
+    ``char`` arrays, are encoded as base64 strings and ``void`` values as ``null``. Enum and flag members and pointers
+    are integers, which :mod:`json` encodes as numbers.
+
+    Example:
+        >>> json.dumps({"header": header}, cls=JSONEncoder)
+    """
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, (Structure, UnionProxy)):
+            return asdict(o)
+
+        if isinstance(o, _BUFFER_TYPES):
+            return base64.b64encode(o).decode()
+
+        if isinstance(o, Void):
+            return None
+
+        return super().default(o)
+
+
+def asjson(obj: Structure | UnionProxy, **kwargs) -> str:
+    """Return the field values of a structure or union as a JSON string, encoded with :class:`JSONEncoder`.
+
+    Note that this is different from :func:`dumpstruct` called with ``output="json"``: this function returns a
+    JSON string with pairs of field names and values, rather than a JSON string that describes the layout of the
+    structure (hex bytes, offsets, display strings).
+
+    Args:
+        obj: The structure or union to convert.
+        **kwargs: Keyword arguments for :func:`json.dumps`, e.g. ``indent``.
+
+    Raises:
+        TypeError: If ``obj`` is not a structure or union instance.
+    """
+    return json.dumps(asdict(obj), cls=JSONEncoder, **kwargs)
+
+
+def attrsetter(path: str) -> Callable[[Any], Any]:
+    path, _, attr = path.rpartition(".")
+    path = path.split(".")
+
+    def _func(obj: Any, value: Any) -> Any:
+        for name in path:
+            obj = getattr(obj, name)
+        setattr(obj, attr, value)
+
+    return _func
+
+
+def _uses_generated_init(type_: type[Structure]) -> bool:
+    """Return whether a structure type uses a generated ``__init__``, so we can bypass it by setting attributes.
+
+    The generated ``__init__`` is set together with ``__fields__``, so a subclass with only its own ``__init__``
+    doesn't count.
+    """
+    return "__fields__" in type_.__dict__ and type_.__new__ is object.__new__
+
+
+def _codegen(func: FunctionType) -> FunctionType:
+    """Decorator that generates a template function with a specified number of fields.
+
+    This code is a little complex but allows use to cache generated functions for a specific number of fields.
+    For example, if we generate a structure with 10 fields, we can cache the generated code for that structure.
+    We can then reuse that code and patch it with the correct field names when we create a new structure with 10 fields.
+
+    The functions that are decorated with this decorator should take a list of field names and return a string of code.
+    The decorated function is needs to be called with the number of fields, instead of the field names.
+    The confusing part is that that the original function takes field names, but you then call it with
+    the number of fields instead.
+
+    Inspired by https://github.com/dabeaz/dataklasses.
+
+    Args:
+        func: The decorated function that takes a list of field names and returns a string of code.
+
+    Returns:
+        A cached function that generates the desired function code, to be called with the number of fields.
+    """
+
+    def make_func_code(num_fields: int) -> FunctionType:
+        exec(func([f"_{n}" for n in range(num_fields)]), {}, d := {})
+        return d.popitem()[1]
+
+    make_func_code.__wrapped__ = func
+    return lru_cache(make_func_code)
+
+
+@_codegen
+def _make_structure__init__(fields: list[str]) -> str:
+    """Generates an ``__init__`` method for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    # Fast path for values that already have the type of the field
+    field_init = "\n".join(
+        f" self.{name} = _{i}_default() if {name} is None"
+        f" else {name} if type({name}) is _{i}_type else _{i}_normalize({name})"
+        for i, name in enumerate(fields)
+    )
+
+    code = f"def __init__(self, /{', ' + field_args or ''}):\n"
+    return code + (field_init or " pass")
+
+
+@_codegen
+def _make_structure__construct__(fields: list[str]) -> str:
+    """Generates a ``__construct__`` function for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    field_args = "".join(f", {field}" for field in fields)
+    field_init = "".join(f" self.{name} = {name}\n" for name in fields)
+
+    code = f"def __construct__(cls{field_args}):\n self = object.__new__(cls)\n"
+    return code + field_init + " return self"
+
+
+@_codegen
+def _make_union__init__(fields: list[str]) -> str:
+    """Generates an ``__init__`` method for a class with the specified fields using setattr.
+
+    Args:
+        fields: List of field names.
+    """
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    field_init = "\n".join(
+        f" object.__setattr__(self, '{name}', _{i}_default() if {name} is None"
+        f" else {name} if type({name}) is _{i}_type else _{i}_normalize({name}))"
+        for i, name in enumerate(fields)
+    )
+
+    code = f"def __init__(self, /{', ' + field_args or ''}):\n"
+    return code + (field_init or " pass")
+
+
+@_codegen
+def _make__eq__(fields: list[str]) -> str:
+    """Generates an ``__eq__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    self_vals = ",".join(f"self.{name}" for name in fields)
+    other_vals = ",".join(f"other.{name}" for name in fields)
+
+    if self_vals:
+        self_vals += ","
+    if other_vals:
+        other_vals += ","
+
+    # In the future this could be a looser check, e.g. an __eq__ on the classes, which compares the fields
+    code = f"""
+    def __eq__(self, other):
+        if self.__class__ is other.__class__:
+            return ({self_vals}) == ({other_vals})
+        return False
+    """
+
+    return dedent(code)
+
+
+@_codegen
+def _make__bool__(fields: list[str]) -> str:
+    """Generates a ``__bool__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    vals = ", ".join(f"self.{name}" for name in fields)
+
+    code = f"""
+    def __bool__(self):
+        return any([{vals}])
+    """
+
+    return dedent(code)
+
+
+@_codegen
+def _make__hash__(fields: list[str]) -> str:
+    """Generates a ``__hash__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    vals = ", ".join(f"self.{name}" for name in fields)
+
+    code = f"""
+    def __hash__(self):
+        return hash(({vals}))
+    """
+
+    return dedent(code)
+
+
+def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
+    """Patches a function's attributes.
+
+    Args:
+        func: The function to patch.
+        fields: List of field names to add.
+        start: The starting index for patching. Defaults to 0.
+    """
+    return type(func)(
+        func.__code__.replace(co_names=(*func.__code__.co_names[:start], *fields)),
+        func.__globals__,
+    )
+
+
+def _generate_structure__init__(fields: list[Field]) -> FunctionType:
+    """Generates an ``__init__`` method for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    mapping = _generate_co_mapping(fields)
+
+    template: FunctionType = _make_structure__init__(len(fields))
+    return type(template)(
+        template.__code__.replace(
+            co_names=_remap_co_values(template.__code__.co_names, mapping),
+            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
+        ),
+        template.__globals__ | _generate__init__globals(fields),
+        argdefs=template.__defaults__,
+    )
+
+
+def _generate_structure__construct__(fields: list[str]) -> FunctionType:
+    """Generates a ``__construct__`` function for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make_structure__construct__(len(fields)), fields, 2)
+
+
+def _generate_union__init__(fields: list[Field]) -> FunctionType:
+    """Generates an ``__init__`` method for a union with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    mapping = _generate_co_mapping(fields)
+
+    template: FunctionType = _make_union__init__(len(fields))
+    return type(template)(
+        template.__code__.replace(
+            co_consts=_remap_co_values(template.__code__.co_consts, mapping),
+            co_names=_remap_co_values(template.__code__.co_names, mapping),
+            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
+        ),
+        template.__globals__ | _generate__init__globals(fields),
+        argdefs=template.__defaults__,
+    )
+
+
+def _generate__init__globals(fields: list[Field]) -> dict[str, Any]:
+    """Generates the default factories, types and conversion functions of fields for an ``__init__`` method.
+
+    The generated code uses the names ``_0_default``, ``_0_type`` and ``_0_normalize`` for the first field, etc.
+
+    Args:
+        fields: List of fields.
+    """
+    result = {}
+    for i, field in enumerate(fields):
+        type_ = _value_type(field)
+        result[f"_{i}_default"] = _default_factory(type_)
+        result[f"_{i}_type"] = type_
+        result[f"_{i}_normalize"] = type_._normalize
+    return result
+
+
+def _value_type(field: Field) -> type[BaseType]:
+    """Return the type of the values of a field, which is ``uint8`` for character bit fields."""
+    if field.bits and issubclass(field.type, Char):
+        return field.type.__cs__.uint8
+    return field.type
+
+
+def _default_factory(type_: type[BaseType]) -> Callable[[], Any]:
+    """Return a function that returns default values of a type, which are only shared if they're immutable."""
+    value = type_.__default__()
+    return repeat(value).__next__ if isinstance(value, _IMMUTABLE_TYPES) else type_.__default__
+
+
+def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
+    """Generates a mapping of generated code object names to field names.
+
+    The generated code uses names like ``_0``, ``_1``, etc. for fields. Return a mapping of these names to the actual
+    field names, and of ``self`` to a name that no field has.
+
+    Args:
+        fields: List of field names.
+    """
+    # Fields can be named self, so prefix until there's no longer a clash
+    instance = "self"
+    while any(field._name == instance for field in fields):
+        instance = f"_{instance}"
+
+    return {"self": instance} | {f"_{i}": field._name for i, field in enumerate(fields)}
+
+
+def _remap_co_values(value: tuple[Any, ...], mapping: dict[str, str]) -> tuple[Any, ...]:
+    """Remaps code object values using a mapping.
+
+    This is used to replace generated code object names with actual field names.
+
+    Args:
+        value: The original code object values.
+        mapping: A mapping of generated code object names to field names.
+    """
+    # Only attempt to remap if the value is a string, otherwise return it as is
+    # This is to avoid issues with trying to remap non-hashable types, and we only need to replace strings anyway
+    return tuple(mapping.get(v, v) if isinstance(v, str) else v for v in value)
+
+
+def _generate__eq__(fields: list[str]) -> FunctionType:
+    """Generates an ``__eq__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__eq__(len(fields)), fields, 1)
+
+
+def _generate__bool__(fields: list[str]) -> FunctionType:
+    """Generates a ``__bool__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__bool__(len(fields)), fields, 1)
+
+
+def _generate__hash__(fields: list[str]) -> FunctionType:
+    """Generates a ``__hash__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__hash__(len(fields)), fields, 1)

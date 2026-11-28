@@ -1,0 +1,362 @@
+# dissect.cstruct
+
+A Dissect module implementing a parser for C-like structures. Structure parsing in Python made easy. With cstruct, you
+can write C-like structures and use them to parse binary data, either as file-like objects or bytestrings.
+
+Parsing binary data with cstruct feels familiar and easy. No need to learn a new syntax or the quirks of a new parsing
+library before you can start parsing data. The syntax isn't strict C but it's compatible with most common structure
+definitions. You can often use structure definitions from open-source C projects and use them out of the box with little
+to no changes. Need to parse an EXT4 super block? Just copy the structure definition from the Linux kernel source code.
+Need to parse some custom file format? Write up a simple structure and immediately start parsing data, tweaking the
+structure as you go.
+
+By design cstruct is incredibly simple. No complex syntax, filters, pre- or post-processing steps. Just structure
+parsing. For more information, please see [the documentation](https://docs.dissect.tools/en/latest/projects/dissect.cstruct/index.html).
+
+## Requirements
+
+This project is part of the Dissect framework and requires Python.
+
+Information on the supported Python versions can be found in the Getting Started section of [the documentation](https://docs.dissect.tools/en/latest/index.html#getting-started).
+
+## Installation
+
+`dissect.cstruct` is available on [PyPI](https://pypi.org/project/dissect.cstruct/).
+
+```bash
+pip install dissect.cstruct
+```
+
+This module is also automatically installed if you install the `dissect` package.
+
+## Build and test instructions
+
+This project uses `tox` to build source and wheel distributions. Run the following command from the root folder to build
+these:
+
+```bash
+tox -e build
+```
+
+The build artifacts can be found in the `dist/` directory.
+
+`tox` is also used to run linting and unit tests in a self-contained environment. To run both linting and unit tests
+using the default installed Python version, run:
+
+```bash
+tox
+```
+
+For a more elaborate explanation on how to build and test the project, please see [the
+documentation](https://docs.dissect.tools/en/latest/contributing/tooling.html).
+
+## Contributing
+
+The Dissect project encourages any contribution to the codebase. To make your contribution fit into the project, please
+refer to [the development guide](https://docs.dissect.tools/en/latest/contributing/developing.html).
+
+## Usage
+All you need to do is instantiate a new cstruct instance and load some structure definitions in there. After that you can start using them from your Python code.
+
+```python
+from dissect.cstruct import cstruct
+
+# Default endianness is LE, but can be configured using a kwarg or setting the 'endian' attribute
+# e.g. cstruct(endian='>') or c_parser.endian = '>'
+parser_def = """
+#define SOME_CONSTANT   5
+
+enum Example : uint16 {
+    A, B = 0x5, C
+};
+
+struct some_struct {
+    uint8   field_1;
+    char    field_2[SOME_CONSTANT];
+    char    field_3[(field_1 & 1) * 5];  // Some random expression to calculate array length
+    Example field_4[2];
+};
+"""
+c_parser = cstruct().load(parser_def)
+
+data = b"\x01helloworld\x00\x00\x06\x00"
+result = c_parser.some_struct(data)  # Also accepts file-like objects
+assert result.field_1 == 0x01
+assert result.field_2 == b"hello"
+assert result.field_3 == b"world"
+assert result.field_4 == [c_parser.Example.A, c_parser.Example.C]
+
+assert c_parser.Example.A == 0
+assert c_parser.Example.C == 6
+assert c_parser.Example(5) == c_parser.Example.B
+
+assert bytes(result) == data
+
+# You can also instantiate structures from Python by using kwargs
+instance = c_parser.some_struct(
+    field_1=5, field_2=b"lorem", field_3=b"ipsum", field_4=[c_parser.Example.B, c_parser.Example.A]
+)
+assert bytes(instance) == b"\x05loremipsum\x05\x00\x00\x00"
+
+```
+
+By default, all structures are compiled into classes that provide optimised performance. You can disable this by passing a `compiled=False` keyword argument to the `.load()` call. You can inspect the resulting source code by accessing the source attribute of the structure: `print(c_parser.some_struct._read.__source__)` or `print(c_parser.some_struct._write_.__source__)`.
+
+More examples can be found in the `examples` directory.
+
+## Features
+### Structure parsing
+Write simple C-like structures and use them to parse binary data, as can be seen in the examples.
+
+### Declarative structure definitions
+Instead of with a C-like definition, structures can also be defined in Python by subclassing `Struct` (or `Union`) and annotating the fields. The resulting classes are regular cstruct structures.
+
+```python
+from typing import Annotated
+
+from dissect.cstruct import cstruct
+from dissect.cstruct.declarative import EOF, Struct, char, field, pointer, uint8, uint16, uint32
+
+
+class Header(Struct):
+    magic: uint8[4]
+    size: uint32
+    data: char["size"]  # Array sizes can refer to other fields
+    flags: Annotated[uint16, field(bits=4)]  # Or field(uint16, bits=4)
+    trailer: char[EOF]  # Reads until the end of the data
+
+
+data = b"ohai\x0c\x00\x00\x00KUSJESVANSRT\x05\x00<3"
+header = Header(data)
+assert header.data == b"KUSJESVANSRT"
+assert header.flags == 5
+assert header.trailer == b"<3"
+assert bytes(header) == data
+
+cs = cstruct(endian=">")
+
+
+class Node(Struct, cs=cs):
+    value: uint32
+    next: pointer["Node"]  # A structure can point to itself
+
+
+class NamedNode(Node):  # A subclass starts with the fields of its parent
+    name: char[None]  # A list index of None means null terminated
+
+
+cs.load("struct list { uint32 count; NamedNode head; };")  # Usable in C-like definitions
+
+node = cs.list(b"\x00\x00\x00\x01" + b"\x00\x00\x00\x07" + b"\x00" * 8 + b"<3\x00").head
+assert node.value == 7
+assert node.name == b"<3"
+```
+
+Each structure is registered in a cstruct instance, which can be passed with the `cs` class keyword argument, together with `align=True` for aligned structures. Without one, a structure uses the cstruct instance of the first bound type or structure in its annotations, or a new cstruct instance.
+
+> [!NOTE]
+> Field annotations are evaluated when the class is created. If your project uses Ruff's `flake8-type-checking` (`TC`) rules, add `Struct` and `Union` to the runtime-evaluated base classes, so that imports only used in field annotations are not moved into a `TYPE_CHECKING` block:
+>
+> ```toml
+> [tool.ruff.lint.flake8-type-checking]
+> runtime-evaluated-base-classes = ["dissect.cstruct.declarative.Struct", "dissect.cstruct.declarative.Union"]
+> ```
+
+### Type parsing
+Aside from loading structure definitions, any of the supported types can be used individually for parsing data. For example, the following is all supported:
+
+```python
+from dissect.cstruct import cstruct
+
+cs = cstruct()
+# Default endianness is LE, but can be configured using a kwarg or setting the attribute
+# e.g. cstruct(endian='>') or cs.endian = '>'
+assert cs.uint32(b"\x05\x00\x00\x00") == 5
+assert cs.uint24[2](b"\x01\x00\x00\x02\x00\x00") == [1, 2]  # You can also parse arrays using list indexing
+assert cs.char[None](b"hello world!\x00") == b"hello world!"  # A list index of None means null terminated
+```
+
+### Creating values
+A type creates a value like its Python base type does, e.g. `int` for `uint32` and `list` for arrays. Bytes-like and file-like objects are parsed instead.
+
+```python
+from dissect.cstruct import cstruct
+
+cs = cstruct()
+assert cs.uint32("5") == 5  # Like int("5")
+assert cs.uint32(b"\x05\x00\x00\x00") == 5  # Parsed
+assert cs.uint8[4]([1, 2]) == [1, 2, 0, 0]  # Padded to the number of entries
+```
+
+Some types don't accept all the values of their Python base type:
+- `char` and `char` arrays don't accept a `str`, encode it to bytes first. An `int` gives a single character, e.g. `cs.char(0x41)` is `b"A"`.
+- `wchar` and `wchar` arrays only accept a `str`.
+- Other arrays don't accept a `str` or an `int`.
+
+A structure or union converts the values of its fields in the same way. A `char` field takes bytes as its value, and a structure field keeps a structure as it is. More bytes than a field needs raise a `ValueError`. Values that are set as attributes aren't converted for performance reasons.
+
+```python
+cs.load("""
+struct example {
+    uint16  values[2];
+    char    name[4];
+};
+""")
+
+obj = cs.example(values=b"\x01\x00\x02\x00", name=b"ab")
+assert obj.values == [1, 2]  # Parsed
+assert obj.name == b"ab\x00\x00"  # Padded
+```
+
+Writing doesn't convert values. E.g. `cs.uint8[2].dumps(b"\x01\x02")` raises a `WriteError`. Use `cs.uint8[2].dumps([1, 2])` instead.
+
+### Unions and nested structures
+Unions and nested structures are supported, both anonymous and named.
+
+```python
+from dissect.cstruct import cstruct
+
+c_def = """
+struct test_union {
+    char magic[4];
+    union {
+        struct {
+            uint32 a;
+            uint32 b;
+        } a;
+        struct {
+            char   b[8];
+        } b;
+    } c;
+};
+
+struct test_anonymous {
+    char magic[4];
+    struct {
+        uint32 a;
+        uint32 b;
+    };
+    struct {
+        char   c[8];
+    };
+};
+"""
+# Default endianness is LE, but can be configured using a kwarg or setting the attribute
+# e.g. cstruct(endian='>') or cs.endian = '>'
+c = cstruct().load(c_def)
+
+assert len(c.test_union) == 12
+
+a = c.test_union(b"ohaideadbeef")
+assert a.magic == b"ohai"
+assert a.c.a.a == 0x64616564
+assert a.c.a.b == 0x66656562
+assert a.c.b.b == b"deadbeef"
+
+assert bytes(a) == b"ohaideadbeef"
+
+b = c.test_anonymous(b"ohai\x39\x05\x00\x00\x28\x23\x00\x00deadbeef")
+assert b.magic == b"ohai"
+assert b.a == 1337
+assert b.b == 9000
+assert b.c == b"deadbeef"
+
+```
+
+### Parse bit fields
+Bit fields are supported as part of structures. They are properly aligned to their boundaries.
+
+```python
+from dissect.cstruct import cstruct
+
+bit_def = """
+struct test {
+    uint16  a:1;
+    uint16  b:1;  // Read 2 bits from an uint16
+    uint32  c;    // The next field is properly aligned
+    uint16  d:2;
+    uint16  e:3;
+};
+"""
+bitfields = cstruct().load(bit_def)
+
+d = b"\x03\x00\xff\x00\x00\x00\x1f\x00"
+a = bitfields.test(d)
+
+assert a.a == 0b1
+assert a.b == 0b1
+assert a.c == 0xFF
+assert a.d == 0b11
+assert a.e == 0b111
+assert bytes(a) == d
+```
+
+### Enums and Flags
+The API to access enum and flag members and their values in the same way as the native Enum types in Python 3. Functionally, it's best comparable to the IntEnum or IntFlag type.
+
+### Custom types
+You can implement your own types by subclassing `BaseType`, and adding them to your cstruct instance with `add_custom_type(name, type, size, alignment, ...)`
+
+### Dynamic length fields
+To read all remaining data in the provided buffer/stream, you can use the magic `EOF` size variable. This will automatically expand until the end of the stream has been reached and works for any field type. For example:
+
+```python
+from dissect.cstruct import cstruct
+
+eof_def = """
+struct example {
+    uint32 magic;
+    char data[EOF];
+};
+"""
+
+c_eof = cstruct().load(eof_def)
+
+example = c_eof.example(b"9\x05\x00\x00arbitrary length data")
+assert example.magic == 1337
+assert example.data == b"arbitrary length data"
+```
+
+### Converting to dicts and JSON
+`asdict()` returns the field values of a structure or union as a dict, like `dataclasses.asdict()`. The method `_asdict()` does the same, like `namedtuple`. Nested structures and unions become dicts and arrays become lists. Other values are returned as they are, so enum members stay enum members and pointers are not dereferenced.
+
+`asjson()` returns the same values as a JSON string. Bytes are encoded as base64 strings, and enum and flag members and pointers as numbers. To encode structures as part of other data, use `JSONEncoder` with `json.dumps()`.
+
+```python
+import json
+
+from dissect.cstruct import JSONEncoder, asdict, asjson, cstruct
+
+c_def = """
+enum Type : uint8 {
+    FILE = 1,
+    DIRECTORY = 2
+};
+
+struct entry {
+    Type   type;
+    char   name[4];
+    uint32 sizes[2];
+};
+"""
+
+c = cstruct().load(c_def)
+
+entry = c.entry(b"\x01test\x01\x00\x00\x00\x02\x00\x00\x00")
+assert asdict(entry) == {"type": c.Type.FILE, "name": b"test", "sizes": [1, 2]}
+assert entry._asdict() == asdict(entry)
+assert asjson(entry) == '{"type": 1, "name": "dGVzdA==", "sizes": [1, 2]}'
+assert json.dumps({"entries": [entry]}, cls=JSONEncoder) == f'{{"entries": [{asjson(entry)}]}}'
+```
+
+### Custom definition parsers
+Don't like the C-like definition syntax? Write your own syntax parser!
+
+## Copyright and license
+
+Dissect is released as open source by Fox-IT (<https://www.fox-it.com>) part of NCC Group Plc
+(<https://www.nccgroup.com>).
+
+Developed by the Dissect Team (<dissect@fox-it.com>) and made available at <https://github.com/fox-it/dissect>.
+
+License terms: Apache License 2.0 (<https://www.apache.org/licenses/LICENSE-2.0>). For more information, see the LICENSE file.
