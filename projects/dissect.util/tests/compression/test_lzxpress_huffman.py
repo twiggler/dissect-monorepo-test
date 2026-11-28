@@ -1,0 +1,275 @@
+from __future__ import annotations
+
+import hashlib
+import io
+from typing import TYPE_CHECKING
+
+import pytest
+
+from dissect.util.compression import lzxpress_huffman
+
+if TYPE_CHECKING:
+    from pytest_benchmark.fixture import BenchmarkFixture
+
+
+PARAMS = (
+    ("data", "digest"),
+    [
+        pytest.param(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000030230000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0200000000000000000000000000002000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "a8dc0000ff2601",
+            "d9f5aeb06abebb3be3f38adec9a2e3b94228d52193be923eb4e24c9b56ee0930",
+            id="basic",
+        ),
+        pytest.param(
+            "0000000000080000000000000000000003000000000000060000000000000000"
+            "9000000080000900990088000000000040573578480055547545440708000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0800000000000000000000000000000000000000000000000800000000000000"
+            "0700000000000000870800000000000086000000000000000600000000000000"
+            "0800000000000080000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "e3fee146f3725c711a5bb00ee612300569ce27062a4157b9b7a26c30b0b1caff"
+            "49bfd1238b265cca601f95e93a2c21ac361968b1463fe47d92cd49879edf162c"
+            "93a2efa7a88b8cce002fbc2315fb6f77deef6ba9ec2b8d3cd9f370ec840c512c"
+            "9a83aa8a4e5c04991e77b0354dffabbab826d5092e2f353d35c390b5f76f6360"
+            "c54185cf79c9ac161edce165a33729c5573647170c746faf628795f2fafaa0b2"
+            "295e3af32d0d9c419d3c871d0f9cce5dd2d106c793ef33c04b61606ec74c50e0"
+            "a28487c217c5d20f1f768bca632c405cbac6c94f733e344cdef2c3b66cc7a156"
+            "61ccaac7b2dc3e1c1edeb61fe0feff25350000",
+            "73d3dd96ca2e2f0144a117019256d770ee7c6febeaee09b24956c723ae22b529",
+            id="large",
+        ),
+        # Compressed on Windows (level 1), exactly one full block followed by the end-of-stream symbol
+        pytest.param(
+            "0000000000000000000000000000000003000000000000060000000000000000"
+            "0000000000000000000005000000000060665666565555455555555555050000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0500000000000000000000000000000000000000000000000000000000000000"
+            "0500000000000000000000000000005000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "e7379a0f503b05ea8f56c14a63330aa28087bd96e27cc2e380fbb76d0020ffcf"
+            "ff0000",
+            "311971d921f30a78ac1e087296cf20a9f8a2ac682de20efe6c99c89ba82c6b35",
+            id="exact-64k",
+        ),
+        # Compressed on Windows, multiple blocks, matches crossing blocks, both length extensions and symbol 256 matches
+        pytest.param(
+            "0000000000000000000000008000800084000000000008070000000000880080"
+            "0000000000000000000000000000000060666756566655665655555555050000"
+            "0000000000000000000000000000000000000000000000080000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0600000000000000000000000000000000000000000000000887800000000000"
+            "8007000000000000778687800000000077770780000000008766760000000000"
+            "7776070000000000088000000000008000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000700000000000000070"
+            "c271198958527a0d80279c241d220546d41b933c82158276d7f76bef89805305"
+            "0e8c25393a60e5723aa4a81847568af39d8ba120268ee1470a58a6905e509ca0"
+            "91a609a7648597e9bdba862ba4e242c7118bb1808008c6a2e6912a3e34c16fa4"
+            "ee11763e0811686eb7d9bcce99ff9dc7d4c0035355cdd4948d37bc61c4bdae2c"
+            "acdae140743cc369a2754fa484b5812b1642304796ac2ec805da138ea120083d"
+            "a77ca90560230ebe664901a566bb7ccbe6abcc8fd23e3758f960c7ad504e3b26"
+            "6cbe7ba3f53b7dfb72b5bc49162fb2df9bef36a2bde0103759fe097318323ddc"
+            "fbb5cff5d9cf0a4f1c895bb87e503f85be84ef86d4d6103e979c40f885acdb2b"
+            "58fe88f3ffaa58e84487c8ff2234516718dfff313dac838ebeffd72b7ad818f6"
+            "0000ff6f0c000000000000000080000008000000008400000000000707008000"
+            "0000880080000000000000000000000000000000086066675756565656665555"
+            "5656050000000000008000000000000000000000000008800000000000000000"
+            "0000000000800000000000000000000080008000000000000000000000000000"
+            "0000000000060000000000000000000000000000000000000000000000008780"
+            "0000000000000008000000000088860800000000008878078000000000000786"
+            "0800000000800000000000000000000000000000700000000000000070080000"
+            "0000000000700707000000007000770000000000607067880000000060800000"
+            "000000006083e1808a8151088746b0bda2152844e12b0a18e92b4202f4914c47"
+            "b48707a024c4754f841ae3d276e54d58f8307241276c9c53b2614f68b9c50656"
+            "0902263786fd96c9352855a71b3f7e0d5c0a8037918092677621147062998a81"
+            "63750cd4e87d0550d924506c68090791945eac8a674c0834802d19a0e6c22312"
+            "b902bf4bca792c82daee3908e3af5fe89867f9be5692ff9ba0d7760575a99082"
+            "0f9bea1ce92ab8f64d721f8eb1fff6136b848e51ff1c0b6190a70bd1c7f8a73d"
+            "f18c5e3d1a468df8d5003b232afe683f4d6b0f1d22ff5f04af57a5023fda1b55"
+            "1c006078725ef0c3ff9804679e382c8951eb7f85ff2115ec48fffd032b9122b0"
+            "7cddc1f1ff0102a2b0c47bb0cc1b495705c1244534672bff61e48424de614882"
+            "25aad4e05ea1d82cde820de6846d2cff07025e3bc762fb3dff4924fbe11e58ca"
+            "e1afadd042ffd6143f68fffd0328c2f4d7b78eff6b13302e5bb1ff11152e22ff"
+            "6f17915fff1c0bb172dc86ff370562acff21195eda6e3bff7209e1a5ff3a05f6"
+            "590000ff9c170000000000000000000000000000000000006400000000000006"
+            "0000000000000000000000000000000000000000000000000066665566565505"
+            "4656556566060000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000060000000000000000000000"
+            "0000000000000000050000000000000000000000000000000000000000000000"
+            "0600000000000000000600000000000000060660000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000005000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "604566000000005088de6c02955bd358a80959c0ff43057254952afde11748b7"
+            "b973e654975bb5b150f3522abbf1967e627b5c62dc21c8da6c81ec9d55552403"
+            "cfc2b464202f75ea39eee65e4e0d86eaab10d381701555cee08497ff3d030000"
+            "0000",
+            "de021bba2f87735aa82632e9ef264915c78eb784eae71291c0b2d41e1049de42",
+            id="multi-block",
+        ),
+        # Compressed on Windows, a match spanning multiple blocks using the 32-bit match length extension
+        pytest.param(
+            "0300000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000303300300000000030030000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000030000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "d652e0700000ff00003c0d030000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000003033"
+            "0030000000002003000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000003000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "00000000000000000000000000227400dc0000",
+            "225eb609eb33b5263a2e655958a453be5b5e18b2c4a6b3a1862e21890faddd34",
+            id="long-match",
+        ),
+    ],
+)
+
+
+# A Huffman table with two 1-bit codes: 0 for the literal "a" and 1 for a match at distance 1 with a length byte
+MATCH_TABLE = bytes(48) + b"\x10" + bytes(86) + b"\x10" + bytes(120)
+
+
+@pytest.mark.parametrize(*PARAMS)
+def test_lzxpress_huffman_decompress(data: str, digest: str) -> None:
+    assert hashlib.sha256(lzxpress_huffman.decompress(bytes.fromhex(data))).hexdigest() == digest
+
+
+def test_lzxpress_huffman_decompress_invalid_distance() -> None:
+    # A Huffman table with two 1-bit codes: 0 for the literal 0x00 and 1 for a match at distance 1
+    table = bytearray(256)
+    table[0] = 0x01
+    table[128] = 0x01
+
+    # The bitstream starts with the match, which has nothing to refer back to yet
+    with pytest.raises(ValueError, match="Invalid match distance"):
+        lzxpress_huffman.decompress(bytes(table) + bytes.fromhex("0080000000000000"))
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        # A Huffman table with a single 1-bit code for the literal "a", which doesn't fill the whole code space
+        pytest.param(bytes(48) + b"\x10" + bytes(207) + bytes(4), "Invalid Huffman tree", id="single_code"),
+        # The literal and the match, of which the length word is 14, while it includes the 15 of the length byte
+        pytest.param(
+            MATCH_TABLE + bytes.fromhex("0040 0000 ff 0e00 0000 0000"),
+            "Invalid match length",
+            id="match_length",
+        ),
+        # The input ends in the length bytes of the match
+        pytest.param(
+            MATCH_TABLE + bytes.fromhex("0040 0000 ff 00"),
+            "Truncated LZXpress Huffman stream",
+            id="truncated_length",
+        ),
+    ],
+)
+def test_lzxpress_huffman_decompress_invalid(data: bytes, message: str) -> None:
+    """Test whether invalid input raises an error, instead of resulting in wrong data."""
+    with pytest.raises(ValueError, match=rf"^{message}$"):
+        lzxpress_huffman.decompress(data, 10)
+
+
+def test_lzxpress_huffman_decompress_truncated_end_of_stream() -> None:
+    """Test whether truncated input raises an error, instead of decoding the zero bits after it as end-of-stream."""
+    # A Huffman table with a 1-bit code 0 for the end-of-stream symbol and 2-bit codes 10 and 11 for "a" and "b"
+    table = bytearray(256)
+    table[48] = 0x20
+    table[49] = 0x02
+    table[128] = 0x01
+
+    # A single word with the code of "a", while the decoder always buffers two words
+    with pytest.raises(ValueError, match=r"^Truncated LZXpress Huffman stream$"):
+        lzxpress_huffman.decompress(bytes(table) + bytes.fromhex("0080"))
+
+
+def test_lzxpress_huffman_decompress_truncated_block() -> None:
+    """Test whether input that ends at the end of a block before the decompressed size is reached raises an error."""
+    # Exactly one full block, so the input ends where the next block would start
+    buf = bytes.fromhex(PARAMS[1][2].values[0])
+
+    with pytest.raises(ValueError, match=r"^Truncated LZXpress Huffman stream$"):
+        lzxpress_huffman.decompress(buf, len(lzxpress_huffman.decompress(buf)) + 1)
+
+
+@pytest.mark.parametrize(*PARAMS)
+def test_lzxpress_huffman_decompress_size(data: str, digest: str) -> None:
+    buf = bytes.fromhex(data)
+    result = lzxpress_huffman.decompress(buf)
+
+    assert hashlib.sha256(lzxpress_huffman.decompress(buf, len(result))).hexdigest() == digest
+    assert lzxpress_huffman.decompress(buf, 100) == result[:100]
+
+
+COMPRESS_PARAMS = (
+    ("data",),
+    [
+        pytest.param(b"", id="empty"),
+        pytest.param(b"Kusjes, van SRT!\n", id="literal"),
+        # A match of 3 bytes at distance 1 at the end, which has the same symbol as the end-of-stream symbol
+        pytest.param(b"ABBBB", id="end_of_stream_match"),
+        pytest.param(b"\x00" * 70000, id="zeros"),
+        pytest.param(bytes(range(256)) * 600, id="repeated"),
+        pytest.param(b"ABCD" * 30, id="medium_match"),
+        # A match length of 273, which doesn't fit in the length byte, because a byte of 255 means that a word follows
+        pytest.param(bytes(274), id="length_255"),
+        pytest.param(b"ABCD" * 3 + b"E" + b"ABCD" * 300, id="long_match"),
+        # The second ABCD is just out of reach of the first
+        pytest.param(b"ABCD" + bytes(65532) + b"ABCD", id="far_match"),
+        pytest.param(
+            b"".join(hashlib.sha256(str(i).encode()).digest() for i in range(4096)),
+            id="incompressible",
+        ),
+    ],
+)
+
+
+@pytest.mark.parametrize(*COMPRESS_PARAMS)
+def test_lzxpress_huffman_compress(data: bytes) -> None:
+    """Test whether compressing and decompressing data results in the original data."""
+    assert lzxpress_huffman.decompress(lzxpress_huffman.compress(data), len(data)) == data
+    assert lzxpress_huffman.decompress(lzxpress_huffman.compress(io.BytesIO(data)), len(data)) == data
+    assert lzxpress_huffman.decompress(lzxpress_huffman.compress(data)) == data
+
+
+def test_lzxpress_huffman_compress_complete_tree() -> None:
+    """Test whether the Huffman table describes a complete tree when only one symbol is used, as Windows requires."""
+    table = lzxpress_huffman.compress(b"")[:256]
+    lengths = [length for byte in table for length in (byte & 0x0F, byte >> 4)]
+    assert sum(1 << (15 - length) for length in lengths if length) == 1 << 15
+
+
+def test_lzxpress_huffman_compress_example() -> None:
+    """Test whether compressing the example of [MS-XCA] section 3.2 results in the same data."""
+    assert lzxpress_huffman.compress(b"abc" * 100) == bytes.fromhex(PARAMS[1][0].values[0])
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize(*PARAMS)
+def test_benchmark_lzxpress_huffman_decompress(data: str, digest: str, benchmark: BenchmarkFixture) -> None:
+    assert hashlib.sha256(benchmark(lzxpress_huffman.decompress, bytes.fromhex(data))).hexdigest() == digest
+
+
+@pytest.mark.benchmark
+def test_benchmark_lzxpress_huffman_compress(benchmark: BenchmarkFixture) -> None:
+    assert hashlib.sha256(benchmark(lzxpress_huffman.compress, bytes(range(256)) * 128)).hexdigest() == (
+        "95ea5c304f28661e74e0066beb04414a5cfd546b924805e8d680f7dce0078082"
+    )

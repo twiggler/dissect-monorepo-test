@@ -1,0 +1,9 @@
+from typing import BinaryIO
+
+def compress(src: bytes) -> bytes: ...
+def decompress(
+    src: bytes | BinaryIO,
+    uncompressed_size: int = -1,
+    return_bytearray: bool = False,
+    dictionary: bytes | None = None,
+) -> bytes | tuple[bytes, int]: ...

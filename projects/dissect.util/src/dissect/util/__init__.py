@@ -1,0 +1,24 @@
+from __future__ import annotations
+
+from dissect.util.compression import (
+    lz4,
+    lznt1,
+    lzo,
+    lzxpress,
+    lzxpress_huffman,
+    sevenbit,
+)
+from dissect.util.hash import crc32c, crc64_redis, crc64c, jenkins
+
+__all__ = [
+    "crc32c",
+    "crc64_redis",
+    "crc64c",
+    "jenkins",
+    "lz4",
+    "lznt1",
+    "lzo",
+    "lzxpress",
+    "lzxpress_huffman",
+    "sevenbit",
+]
